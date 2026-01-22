@@ -9,31 +9,66 @@ app.get('/', (c) => {
 
 // battle route
 app.post('/battle', async (c) => {
-	// extract user input, expecting { topic: Apple }
-	const body = await c.req.json();
-	const topic = body.topic || "freestyle";
+	let userRap = "";
 
-	// construct prompt
+	// check content-type to see what user sent
+	const contentType = c.req.header("content-type") || "";
+
+	if (contentType.includes('application/json')) {
+		// user sent text
+		const body = await c.req.json();
+		userRap = body.topic || 'freestyle'
+	} else {
+		// user sent audio
+		const audioData = await c.req.arrayBuffer();
+
+		// transcribe audio -> text
+		const transcription = await c.env.AI.run('@cf/openai/whisper', {
+			audio: [...new Uint8Array(audioData)]
+		});
+		userRap = transcription.text;
+	}
+
+	// send text to Llama 3
 	const messages = [
 		{
 			role: 'system',
-			content: 'You are a skilled battle rapper. Write a 4-line aggressive rap verse about the given topic. Rhyme scheme AABB. Skip introductions like "here is the verse"'
+			content: "You are a battle rapper. Response to the user\'s verse with a 4-line aggressive comeback. Rhyme Scheme AABB, don't start with 'this is the rap'"
 		},
 		{
 			role: 'user',
-			content: `Topic: ${topic}`
+			content: `My verse: ${userRap}`
 		}
 	];
 
-	// run AI model
-	const response = await c.env.AI.run('@cf/meta/llama-3.1-8b-instruct-fast', {
+	const rapResponse = await c.env.AI.run('@cf/meta/llama-3-8b-instruct', {
 		messages: messages
 	});
 
-	// return result
 	return c.json({
-		topic: topic,
-		verse: response.response
+		userSaid: userRap,
+		aiVerse: rapResponse.response
+	});
+});
+
+// voice transcription route
+app.post('/transcribe', async (c) => {
+	// get raw audio data from upload
+	const audioData = await c.req.arrayBuffer();
+
+	// validte 
+	if (!audioData || audioData.byteLength === 0) {
+		return c.json({ error: 'No audio data received' }, 400);
+	}
+
+	// run whisper model
+	const response = await c.env.AI.run('@cf/openai/whisper', {
+		audio: [...new Uint8Array(audioData)]
+	});
+
+	// return text
+	return c.json({
+		text: response.text
 	});
 });
 
