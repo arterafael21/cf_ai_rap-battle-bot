@@ -1,15 +1,17 @@
 import { Hono } from 'hono';
+import { html } from './ui'
 
 const app = new Hono();
 
 // home page
 app.get('/', (c) => {
-	return c.text('Rap Battle Bot is Online! Ready to drop bars.');
+	return c.html(html);
 });
 
 // battle route
 app.post('/battle', async (c) => {
 	let userRap = "";
+	let username = "guest"; // Default
 
 	// check content-type to see what user sent
 	const contentType = c.req.header("content-type") || "";
@@ -18,6 +20,8 @@ app.post('/battle', async (c) => {
 		// user sent text
 		const body = await c.req.json();
 		userRap = body.topic || 'freestyle'
+		// if username in body, override
+		if (body.username) username = body.username;
 	} else {
 		// user sent audio
 		const audioData = await c.req.arrayBuffer();
@@ -29,7 +33,7 @@ app.post('/battle', async (c) => {
 		userRap = transcription.text;
 	}
 
-	// send text to Llama 3
+	// send text to Llama 3 for AI response
 	const messages = [
 		{
 			role: 'system',
@@ -37,7 +41,7 @@ app.post('/battle', async (c) => {
 		},
 		{
 			role: 'user',
-			content: `My verse: ${userRap}`
+			content: userRap
 		}
 	];
 
@@ -45,9 +49,25 @@ app.post('/battle', async (c) => {
 		messages: messages
 	});
 
+	// update stats 
+	const result = userRap.length > 10 ? "win" : "loss"
+
+	if (username !== "guest") {
+		// get stub for this user
+		const id = c.env.USER_PROFILE.idFromName(username);
+		const stub = c.env.USER_PROFILE.get(id);
+
+		// update do
+		await stub.fetch('http://do/update', {
+			method: 'POST',
+			body: JSON.stringify({ result: result })
+		});
+	}
+
 	return c.json({
-		userSaid: userRap,
-		aiVerse: rapResponse.response
+		userRap: userRap,
+		aiVerse: rapResponse.response,
+		result: result
 	});
 });
 
