@@ -91,8 +91,8 @@ export const html = `
                 const data = await res.json();
 
                 const html = \`
-                    <div class="verse"><strong>YOU:</strong><br>\${data.userRap}</div>
-                    <div class="verse ai-verse"><strong>AI:</strong><br>\${data.aiVerse}</div>
+                    <div class="verse"><strong>YOU:</strong><br>\${data.user_said}</div>
+                    <div class="verse ai-verse"><strong>AI:</strong><br>\${data.ai_verse}</div>
                     <hr style="border-color:#333">
                 \`;
                 log.innerHTML = html + log.innerHTML; 

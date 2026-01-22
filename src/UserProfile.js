@@ -22,7 +22,7 @@ app.post('/update', async (c) => {
 
     let stats = await storage.get("stats") || { wins: 0, losses: 0, rank: "Novice"};
 
-    if (body.result === "win") stats.win += 1;
+    if (body.result === "win") stats.wins += 1;
     if (body.result === "loss") stats.losses += 1;
 
     await storage.put("stats", stats);
