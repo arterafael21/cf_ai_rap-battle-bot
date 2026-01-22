@@ -5,7 +5,7 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "rap-battle-bot",
-	"main": "src/index.js",
+	"main": "src/index.jsx",
 	"compatibility_date": "2025-09-27",
 	"observability": {
 		"enabled": true

@@ -1,11 +1,21 @@
+/** @jsx jsx */
 import { Hono } from 'hono';
-import { html } from './ui'
+import { MainPage } from './ui';
+import { clientScript } from './client'
+import { jsx } from 'hono/jsx'
+import { UserProfile } from './UserProfile'
 
 const app = new Hono();
 
 // home page
 app.get('/', (c) => {
-	return c.html(html);
+	return c.html(<MainPage />);
+});
+
+app.get('/client.js', (c) => {
+	return c.text(clientScript, 200, {
+		'Content-Type': 'application/javascript',
+	});
 });
 
 // battle route
@@ -19,7 +29,7 @@ app.post('/battle', async (c) => {
 
 	if (contentType.includes('application/json')) {
 		const body = await c.req.json();
-		userRap = body.topic || 'freestyle';
+		userRap = body.userRap || 'freestyle';
 
 		// if body has username, override header
 		if (body.username) username = body.username;
@@ -66,8 +76,8 @@ app.post('/battle', async (c) => {
 	}
 
 	return c.json({
-		user_said: userRap,
-		ai_verse: rapResponse.response,
+		userRap: userRap,
+		aiVerse: rapResponse.response,
 		result: result
 	});
 });
