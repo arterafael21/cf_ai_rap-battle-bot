@@ -41,7 +41,7 @@ export const MainPage = () => {
                 <br />
                 <div>
                     <button id="mic-btn" data-recording="false">🎤 Record</button>
-                    <button id="battle-btn">Submit Text</button>
+                    <button id="battle-btn">Submit Verse</button>
                 </div>
                 <div id="status">Ready</div>
                 </div>

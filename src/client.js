@@ -43,19 +43,18 @@ async function loadHistory() {
 
     // re-render all saved battles
     history.forEach(battle => {
-        const entry = document.createElement('div');
-        entry.className = 'battle-entry';
-        entry.innerHTML = \`
-           <div class="verse"><strong>YOU:</strong><br>\${battle.user}</div>
-           <div class="verse ai"><strong>AI:</strong><br>\${battle.ai}</div> 
-        \`;
-        log.appendChild(entry);
+        renderEntry(battle);
     });
 }
 
-function saveToHistory(userRap, aiVerse) {
+function saveToHistory(data) {
+    console.log("Saving to history storage:", data);
     const history = JSON.parse(localStorage.getItem('battle_history') || '[]');
-    history.unshift({ user: userRap, ai: aiVerse }); // add to top
+
+    // save whole object
+    history.unshift(data); // add to top
+    // limit history to last 20 items
+    if (history.length > 20) history.pop();
     localStorage.setItem('battle_history', JSON.stringify(history));
 
     // refresh
@@ -67,6 +66,60 @@ function clearHistory() {
         localStorage.removeItem('battle_history');
         document.getElementById('battle-log').innerHTML="";
     }
+}
+
+// renders scoreboard
+function renderEntry(data) {
+    const log = document.getElementById('battle-log');
+    const entry = document.createElement('div');
+    entry.className = 'battle-entry';
+
+    // handle colors
+    const resultColor = data.result === 'win' ? '#0f0' : '#f00';
+    const resultText = data.result === 'win' ? 'WINNER' : 'DEFEATED';
+
+    // access scores
+    const userText = data.userRap || data.user || "";
+    const aiText = data.aiVerse || data.ai || "";
+
+    const s = data.scores || { user: {}, ai: {}, comment: 'Legacy Battle' };
+    const uScore = s.user || { total: 0, rhyme: 0, flow: 0, insults: 0, creativity: 0 };
+    const aScore = s.ai || { total: 0, rhyme: 0, flow: 0, insults: 0, creativity: 0 };
+
+    // build HTML
+    // 3. Build HTML
+    entry.innerHTML = \`
+       <div class="verse"><strong>YOU:</strong><br>\${userText}</div>
+       
+       <div class="score-box">
+           <div class="score-header" style="color: \${resultColor};">
+               \${resultText}
+           </div>
+           
+           <div">
+               <div">
+                   <div style="color:#0f0; font-weight:bold;">YOU (\${uScore.total})</div>
+                   <div>Rhyme: \${uScore.rhyme}</div>
+                   <div>Flow: \${uScore.flow}</div>
+                   <div>Insults: \${uScore.insults}</div>
+               </div>
+
+               <div style="border-left:1px solid #555;"></div>
+
+               <div>
+                   <div style="color:#d742f5; font-weight:bold;">AI (\${aScore.total})</div>
+                   <div>Rhyme: \${aScore.rhyme}</div>
+                   <div>Flow: \${aScore.flow}</div>
+                   <div>Insults: \${aScore.insults}</div>
+               </div>
+           </div>
+
+           <div class="judge-comment"> \${s.comment}</div>
+       </div>
+
+       <div class="verse ai"><strong>AI:</strong><br>\${aiText}</div> 
+    \`;
+    log.appendChild(entry);
 }
 
 // microphone logic
@@ -113,7 +166,9 @@ async function startBattle(type) {
     if (type === 'text') {
         if (!userRapInput.value) return alert('Do not be a chump. Freestyle!');
         status.innerText = "Sending your verse...";
+
         await sendBattleData({ userRap: userRapInput.value }, 'text');
+
         userRap.value = ""; // clear input
     }
 }
@@ -140,7 +195,7 @@ async function sendBattleData(payload, type) {
         const data = await res.json();
 
         // save data
-        saveToHistory(data.userRap, data.aiVerse);
+        saveToHistory(data);
 
         loadStats();
         document.getElementById('status').innerText = "Ready";
