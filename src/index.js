@@ -72,4 +72,25 @@ app.post('/transcribe', async (c) => {
 	});
 });
 
+app.get('/profile/:username', async (c) => {
+	const username = c.req.param('username');
+
+	// generate unique ID based on username
+	const id = c.env.USER_PROFILE.idFromName(username);
+
+	// get the stub
+	const obj = c.env.USER_PROFILE.get(id);
+
+	// call the do
+	const response = await obj.fetch('http://do/stats');
+
+	const stats = await response.json();
+
+	return c.json({
+		user: username,
+		data: stats
+	});
+});
+
 export default app;
+export { UserProfile } from './UserProfile'

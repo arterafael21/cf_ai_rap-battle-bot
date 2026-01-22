@@ -12,6 +12,14 @@
 	},
 	"ai": {
 		"binding": "AI"
+	},
+	"durable_objects": {
+		"bindings": [
+			{
+				"name": "USER_PROFILE", // var name
+				"class_name": "UserProfile" // class name
+			}
+		]
 	}
 	/**
 	 * Smart Placement
