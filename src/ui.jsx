@@ -11,6 +11,12 @@ export const MainPage = () => {
                 <title>Rap Battle Bot</title>
                 {/* HERE is the magic line. We link to the route we will create. */}
                 <script src="/client.js" defer></script>
+                <style dangerouslySetInnerHTML={{__html: `                    
+                    .verse { white-space: pre-wrap; margin-bottom: 10px; line-height: 1.5; }
+                    
+                    .ai { color: #f0f; }
+                    textarea { width: 100%; resize: vertical; margin-bottom: 10px; padding: 10px; }
+                `}} />
             </head>
             <body>
                 <h1>Rap Battle Bot</h1>
@@ -30,7 +36,7 @@ export const MainPage = () => {
                 <div id="battle-panel">
                 <h3>Battle Arena</h3>
                 <div>
-                    <input type="text" id="userRap" placeholder="Enter your rap..." />
+                    <textarea type="text" id="userRap" placeholder="Enter your rap..." rows="4" cols="50"></textarea>
                 </div>
                 <br />
                 <div>
@@ -44,6 +50,7 @@ export const MainPage = () => {
                 <div id="results-panel">
                 <h3>History</h3>
                 <div id="battle-log"></div>
+                <button id="clear-btn">Clear History</button>
                 </div>
             </body>
         </html>

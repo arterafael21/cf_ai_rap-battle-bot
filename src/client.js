@@ -14,9 +14,11 @@ if (!username) {
 document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('username-display').innerText = 'Identity: ' + username;
     loadStats();
+    loadHistory();
 
     document.getElementById('mic-btn').addEventListener('click', toggleMic);
     document.getElementById('battle-btn').addEventListener('click', () => startBattle('text'));
+    document.getElementById('clear-btn').addEventListener('click', clearHistory);
 });
 
 // stats logic
@@ -28,6 +30,43 @@ async function loadStats() {
         document.getElementById('losses').innerText = data.data.losses;
         document.getElementById('rank').innerText = data.data.rank;
     } catch (e) { console.error('Stats error', e) }
+}
+
+// --- HISTORY SYSTEM ---
+
+async function loadHistory() {
+    const history = JSON.parse(localStorage.getItem('battle_history') || '[]');
+    const log = document.getElementById('battle-log');
+
+    // clear screen completely
+    log.innerHTML = ''; // clear current
+
+    // re-render all saved battles
+    history.forEach(battle => {
+        const entry = document.createElement('div');
+        entry.className = 'battle-entry';
+        entry.innerHTML = \`
+           <div class="verse"><strong>YOU:</strong><br>\${battle.user}</div>
+           <div class="verse ai"><strong>AI:</strong><br>\${battle.ai}</div> 
+        \`;
+        log.appendChild(entry);
+    });
+}
+
+function saveToHistory(userRap, aiVerse) {
+    const history = JSON.parse(localStorage.getItem('battle_history') || '[]');
+    history.unshift({ user: userRap, ai: aiVerse }); // add to top
+    localStorage.setItem('battle_history', JSON.stringify(history));
+
+    // refresh
+    loadHistory();
+}
+
+function clearHistory() {
+    if (confirm("Delete all battle history?")) {
+        localStorage.removeItem('battle_history');
+        document.getElementById('battle-log').innerHTML="";
+    }
 }
 
 // microphone logic
@@ -68,13 +107,13 @@ async function toggleMic() {
 
 // battle logic (text or audio)
 async function startBattle(type) {
-    const userRap = document.getElementById('userRap');
+    const userRapInput = document.getElementById('userRap');
     const status = document.getElementById('status');
 
     if (type === 'text') {
-        if (!userRap.value) return alert('Do not be a chump. Freestyle!');
-        status.innerText = "Sending text...";
-        await sendBattleData({ userRap: userRap.value }, 'text');
+        if (!userRapInput.value) return alert('Do not be a chump. Freestyle!');
+        status.innerText = "Sending your verse...";
+        await sendBattleData({ userRap: userRapInput.value }, 'text');
         userRap.value = ""; // clear input
     }
 }
@@ -100,16 +139,8 @@ async function sendBattleData(payload, type) {
         const res = await fetch('/battle', options);
         const data = await res.json();
 
-        // render result
-        const log = document.getElementById('battle-log');
-        const entry = document.createElement('div');
-
-        entry.innerHTML =  \`
-            <hr>
-            <div><strong>YOU:<strong> \${data.userRap}</div>
-            <div><strong>AI:</strong> \${data.aiVerse}</div>
-        \`;
-        log.prepend(entry);
+        // save data
+        saveToHistory(data.userRap, data.aiVerse);
 
         loadStats();
         document.getElementById('status').innerText = "Ready";
