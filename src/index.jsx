@@ -185,7 +185,7 @@ app.post('/challenge/create', async (c) => {
     return c.json({ battleId: hexId });
 })
 
-// FIX: CHANGED TO GET (Load Challenge Info)
+// GET
 app.get('/challenge/:id', async (c) => {
     const hexId = c.req.param('id');
     try {
@@ -273,7 +273,7 @@ app.get('/ws/battle/:id', async (c) => {
 
 	let id;
 	try {
-		id = c.env.CHALLENGE.idFromString(idStr);
+		id = c.env.CHALLENGE.idFromName(idStr);
 	} catch {
 		id = c.env.CHALLENGE.newUniqueId();
 	}

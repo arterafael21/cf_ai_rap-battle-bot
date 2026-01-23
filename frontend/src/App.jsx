@@ -45,8 +45,8 @@ function RapBattleApp() {
   const [mode, setMode] = useState('menu') // 'menu', 'create', 'join', 'battle', 'result'
   const [battleCode, setBattleCode] = useState(''); // ID to share
   const [p1Data, setP1Data] = useState(null); // the opponent's data when joining
-  const [duelResult, setDuelResult] = useState(null); // final score
-
+  const [duelResult, setDuelResult] = useState(null); // final score'
+  const ws = useRef(null);
 
 	// AUDIO REFS
 	const audioCache = useRef({});
@@ -239,10 +239,25 @@ function RapBattleApp() {
 	};
 
   // WEBSOCKET MULTIPLAYER
+  // Create Game
+  const startMultiplayer = () => {
+	if (!input) return alert("Write a verse first!");
+	// gen random ID for room
+	const roomID = Math.random().toString(36).substring(2, 7);
+	setBattleCode(roomID);
+	connectToWebSocket(roomID, 'CREATE');
+  };
+  
+  // Join Game
+  const joinMultiplayer = () => {
+	if (!battleCode) return alert("Enter a code!");
+	connectToWebSocket(battleCode, 'JOIN');
+  };
+
   const connectToWebSocket = (roomID, action) => {
 	if (ws.current) ws.current.close();
 
-	setStatus('Connecting');
+	setStatus('Connecting...');
 
 	const socket = new WebSocket(`ws://127.0.0.1:8787/ws/battle/${roomID}`);
 
@@ -285,7 +300,15 @@ function RapBattleApp() {
 			setMode('result');
 			ws.current.close(); 
 		}
-	}
+	};
+
+	socket.onerror = (e) => console.error("WS ERROR", e);
+  };
+
+  const sendWsReply = () => {
+	if (!ws.current) return;
+	if (!input) return alert("Rap something back!")
+	ws.current.send(JSON.stringify({ type: 'REPLY', verse: input }))
   }
 
 	return (
@@ -548,7 +571,7 @@ function RapBattleApp() {
 						</Group>
 
 						<Text c="dimmed" mt="md" ta="center">"{duelResult.scores.comment}"</Text>
-						<Button mt="lg" onClick={() => { setMode="menu"; setInput(''); }}>Back to Menu</Button>
+						<Button mt="lg" onClick={() => { setMode("menu"); setInput(''); }}>Back to Menu</Button>
 					</Stack>
 				</Card>
 			)}

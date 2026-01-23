@@ -1,9 +1,7 @@
-import { websocket } from "hono/bun";
-
 export class Challenge {
     constructor(state, env) {
         this.state = state;
-        this.session = []; // keep track of everyone in the room (P1 + P2)
+        this.sessions = []; // keep track of everyone in the room (P1 + P2)
         this.env = env;
         this.p1 = null;
         this.p2 = null;
@@ -71,7 +69,7 @@ export class Challenge {
     }
 
     broadcast(message) {
-        this.message.forEach(s => {
+        this.sessions.forEach(s => {
             try { s.send(JSON.stringify(message)); }  catch (e) {}
         });
     }
