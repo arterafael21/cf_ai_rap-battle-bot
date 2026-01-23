@@ -428,7 +428,7 @@ function RapBattleApp() {
                         >
                             {isRecording ? 'Stop' : 'Record'}
                         </Button>
-                        <Button onClick={createChallenge} loading={isLoading}>Create Challenge</Button>
+                        <Button onClick={startMultiplayer} loading={isLoading}>Create Challenge</Button>
                     </Group>
                 </Card>
             )}
