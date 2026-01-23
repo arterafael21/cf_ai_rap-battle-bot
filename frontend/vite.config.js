@@ -11,6 +11,7 @@ export default defineConfig({
       '/profile': 'http://localhost:8787',
       '/speak': 'http://localhost:8787',
       '/transcribe': 'http://localhost:8787',
+      '/challenge': 'http://localhost:8787',
     }
   }
 })
