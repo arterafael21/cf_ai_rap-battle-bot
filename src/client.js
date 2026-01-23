@@ -149,12 +149,24 @@ function renderEntry(data) {
 // unified audio handler
 async function handleAudioClick(id, text, opponent, btnId) {
     const btn = document.getElementById(btnId);
+    const status = document.getElementById('status');
+
+    // disable button
+    btn.disabled = true;
+
+    const onPlaybackEnd = () => {
+        btn.innerText = "Play Audio";
+        btn.disabled = false;
+
+        status.innerText = "Ready";
+    }
 
     // play if cached
     if (audioCache[id]) {
         console.log("Playing from cache...");
         const audio = new Audio(audioCache[id]);
         btn.innerText = "Playing...";
+        status.innerText = "Playing Audio";
         audio.play();
         audio.onended = () => { btn.innerText = 'Play Audio'; };
         return;
@@ -162,6 +174,7 @@ async function handleAudioClick(id, text, opponent, btnId) {
 
     // generate if new
     btn.innerText = "Generating...";
+    status.innerText = "Generating Audio...";
     btn.disabled = true;
 
     try {
@@ -181,21 +194,19 @@ async function handleAudioClick(id, text, opponent, btnId) {
 
         // Play immediately
         const audio = new Audio(audioUrl);
+
+        status.innerText = "Outputting Audio...";
+        btn.innerText = "Playing...";
+
         audio.play();
         
-        // Update Button State to "Play"
-        btn.disabled = false;
-        btn.style.background = '#4CAF50';
-        btn.innerText = "🔊 Playing...";
-        
-        audio.onended = () => { 
-            btn.innerText = "▶️ Play Audio"; 
-        };
+        audio.onended = onPlaybackEnd;
 
     } catch (e) {
         console.error('Audio Error:', e);
         btn.innerText = "Error";
         btn.disabled = false;
+        status.innerText = "Audio Failed";
     }
 }
 
@@ -258,7 +269,7 @@ async function sendBattleData(payload, type) {
     const btn = document.getElementById('battle-btn');
     const status = document.getElementById('status');
     btn.disabled = true;
-    status.innerText = "Battling..."
+    status.innerText = "Sending Verse..."
 
     try {
         const options = {
@@ -275,8 +286,12 @@ async function sendBattleData(payload, type) {
             options.body = payload;
         }
 
+        status.innerText = "AI Writing and Judging...";
+
         const res = await fetch('/battle', options);
         const data = await res.json();
+
+        status.innerText = "Outputting Results...";
 
         console.log('Received Response from /battle:', data);
 
@@ -284,6 +299,8 @@ async function sendBattleData(payload, type) {
         saveToHistory(data);
 
         loadStats();
+
+        status.innerText = "Ready";
         
     } catch (e) {
         alert("Error: " + e.message);
