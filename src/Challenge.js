@@ -72,7 +72,7 @@ export class Challenge {
 
     broadcast(message) {
         this.message.forEach(s => {
-            try { s.send(JSON.stringify(message)}  catch (e) {}
+            try { s.send(JSON.stringify(message)); }  catch (e) {}
         });
     }
 

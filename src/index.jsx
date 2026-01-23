@@ -261,5 +261,26 @@ app.get('/leaderboard', async (c) => {
     }
 });
 
+
+// WEBSOCKET ROUTE
+app.get('/ws/battle/:id', async (c) => {
+	const upgradeHeader = c.req.header('Upgrade');
+	if (!upgradeHeader || upgradeHeader !== 'websocket') {
+		return c.text('Expected Upgrade: websocket', 426);
+	}
+
+	const idStr = c.req.param('id');
+
+	let id;
+	try {
+		id = c.env.CHALLENGE.idFromString(idStr);
+	} catch {
+		id = c.env.CHALLENGE.newUniqueId();
+	}
+
+	const stub = c.env.CHALLENGE.get(id);
+	return stub.fetch(c.req.raw);
+})
+
 export default app;
 export { UserProfile, Leaderboard, Challenge };
