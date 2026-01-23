@@ -10,17 +10,20 @@ const app = new Hono();
 const OPPONENTS = {
     'roboflow': {
         name: 'RoboFlow',
-        system: 'You are RoboFlow, a basic battle rapper. Keep rhymes simple (AABB). Be mildly competitive but not too mean.',
+        // Easy mode: Simple instructions
+        system: 'You are RoboFlow, a basic battle rapper. Keep rhymes simple (AABB). Be mildly competitive but not too mean. CRITICAL FOR AUDIO: End every single line with a comma or period to ensure the voice pauses correctly.',
         difficultyModifier: 0 
     },
     'bytebeater': {
         name: 'ByteBeater',
-        system: 'You are ByteBeater, an elite technical lyricist. Use multi-syllabic rhymes, complex metaphors, and aggresive flows. DESTROY your opponent.',
+        // Hard mode: Complex flow instructions
+        system: 'You are ByteBeater, an elite technical lyricist. Use multi-syllabic rhymes, complex metaphors, and aggressive flows. DESTROY your opponent. CRITICAL FOR AUDIO: Use commas frequently within lines to create a choppy, aggressive rhythm. End every line with a period.',
         difficultyModifier: 3
     },
     'ai-ce': {
         name: 'AI-CE',
-        system: 'You are AI-CE, a goofy, clownish rapper. Your goal is to be funny. Roast the user but also make self-deprecating jokes. Use slang.',
+        // Funny mode: Comedic timing instructions
+        system: 'You are AI-CE, a goofy, clownish rapper. Your goal is to be funny. Roast the user but also make self-deprecating jokes. Use slang. CRITICAL FOR AUDIO: End every line with a comma or period to perfect your comedic timing.',
         difficultyModifier: -2 
     }
 };
