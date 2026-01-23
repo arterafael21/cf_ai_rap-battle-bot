@@ -121,5 +121,23 @@ app.get('/profile/:username', async (c) => {
     return c.json({ user: username, data: stats });
 });
 
+// 4. Transcribe Route
+app.post('/transcribe', async (c) => {
+    const audioData = await c.req.arrayBuffer();
+    if (!audioData || audioData.byteLength === 0) {
+        return c.json({ error: 'No audio data received' }, 400);
+    }
+    
+    try {
+        const response = await c.env.AI.run('@cf/openai/whisper', {
+            audio: [...new Uint8Array(audioData)]
+        });
+        return c.json({ text: response.text });
+    } catch(e) {
+        console.error("Transcription Failed", e);
+        return c.json({ error: "Transcription Failed" }, 500);
+    }
+});
+
 export default app;
 export { UserProfile } from './UserProfile';
