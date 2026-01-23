@@ -18,9 +18,23 @@
 			{
 				"name": "USER_PROFILE", // var name
 				"class_name": "UserProfile" // class name
+			},
+			{
+				"name": "LEADERBOARD",
+				"class_name": "Leaderboard"
 			}
 		]
-	}
+	},
+	"migrations": [
+		{
+			"tag": "v1",
+			"new_classes": ["UsesrProfile"]
+		},
+		{
+			"tag": "v2",
+			"new_classes": ["Leaderboard"]
+		}
+	]
 	/**
 	 * Smart Placement
 	 * https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement

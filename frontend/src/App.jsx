@@ -225,7 +225,7 @@ function RapBattleApp() {
 		<Container size="sm" py="xl">
 			<Stack gap="lg">
 				{/* HEADER */}
-				<Tabs deafultValue="battle">
+				<Tabs defaultValue="battle">
 					<Tabs.List>
 						<Tabs.Tab value="battle" leftSection={<IconSwords size={14} />}>
 							Battle Arena
@@ -357,13 +357,13 @@ function RapBattleApp() {
                   </Table.Tr>
                 </Table.Thead>
                 <Table.Tbody>
-                  {leaderboard.map((player, index) => {
+                  {leaderboard.map((player, index) => (
                     <Table.Tr key={player.username}>
                       <Table.Td>#{index + 1}</Table.Td>
                       <Table.Td fw={700}>{player.username}</Table.Td>
                       <Table.Td>{player.wins}</Table.Td>
                     </Table.Tr>
-                  })}
+                  ))}
                 </Table.Tbody>
               </Table>
             </Card>

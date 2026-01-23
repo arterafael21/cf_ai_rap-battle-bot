@@ -6,9 +6,11 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      '/battle': 'http://127.0.0.1:8787',
-      '/speak': 'http://127.0.0.1:8787',
-      '/profile': 'http://127.0.0.1:8787'
+      '/leaderboard': 'http://localhost:8787',
+      '/battle': 'http://localhost:8787',
+      '/profile': 'http://localhost:8787',
+      '/speak': 'http://localhost:8787',
+      '/transcribe': 'http://localhost:8787',
     }
   }
 })
