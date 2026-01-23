@@ -1,89 +1,65 @@
-/** @jsx jsx */
 import { Hono } from 'hono';
-import { MainPage } from './ui';
-import { clientScript } from './client';
-import { jsx } from 'hono/jsx';
+import { cors } from 'hono/cors';
 import { UserProfile } from './UserProfile';
+import { Leaderboard } from './Leaderboard';
+import { Challenge } from './Challenge';
 
 const app = new Hono();
+
+app.use('/*', cors());
 
 const OPPONENTS = {
     'roboflow': {
         name: 'RoboFlow',
-        // Easy mode: Simple instructions
-        system: 'You are RoboFlow, a basic battle rapper. Keep rhymes simple (AABB). Be mildly competitive but not too mean. CRITICAL FOR AUDIO: End every single line with a comma or period to ensure the voice pauses correctly.',
+        system: 'You are RoboFlow, a basic battle rapper. Keep rhymes simple (AABB). Be mildly competitive but not too mean. Match the number of lines the User gives in their verse. CRITICAL FOR AUDIO: End every single line with a comma or period to ensure the voice pauses correctly.',
         difficultyModifier: 0 
     },
     'bytebeater': {
         name: 'ByteBeater',
-        // Hard mode: Complex flow instructions
         system: 'You are ByteBeater, an elite technical lyricist. Use multi-syllabic rhymes, complex metaphors, and aggressive flows. DESTROY your opponent. CRITICAL FOR AUDIO: Use commas frequently within lines to create a choppy, aggressive rhythm. End every line with a period.',
         difficultyModifier: 3
     },
     'ai-ce': {
         name: 'AI-CE',
-        // Funny mode: Comedic timing instructions
-        system: 'You are AI-CE, a goofy, clownish rapper. Your goal is to be funny. Roast the user but also make self-deprecating jokes. Use slang. CRITICAL FOR AUDIO: End every line with a comma or period to perfect your comedic timing.',
+        system: 'You are AI-CE, a goofy, clownish rapper. Your goal is to be funny. Roast the user but also make self-deprecating jokes. Use slang. Match the number of lines the User gives in their verse. CRITICAL FOR AUDIO: End every line with a comma or period to perfect your comedic timing.',
         difficultyModifier: -2 
     }
 };
 
-app.get('/', (c) => c.html(<MainPage />));
-
-app.get('/client.js', (c) => {
-    return c.text(clientScript, 200, {
-        'Content-Type': 'application/javascript',
-    });
-});
-
+// 1. BATTLE ROUTE (Single Player)
 app.post('/battle', async (c) => {
     let userRap = "";
     let username = c.req.header('X-Username') || 'guest';
-    const contentType = c.req.header('Content-Type') || '';
-    let opponentID = 'roboflow';
-
-    if (contentType.includes('application/json')) {
-        const body = await c.req.json();
-        userRap = body.userRap || 'freestyle';
-        if (body.username) username = body.username;
-        if (body.opponent) opponentID = body.opponent;
-    } else {
-        const audioData = await c.req.arrayBuffer();
-        opponentID = c.req.header('X-Opponent') || 'roboflow';
-        const transcription = await c.env.AI.run('@cf/openai/whisper', {
-            audio: [...new Uint8Array(audioData)]
-        });
-        userRap = transcription.text;
-    }
-
+    const body = await c.req.json();
+    
+    userRap = body.userRap || 'freestyle';
+    const opponentID = body.opponent || 'roboflow';
     const opponentConfig = OPPONENTS[opponentID] || OPPONENTS['roboflow'];
     
-    const rapperPrompt = [
-        { role : 'system', content: opponentConfig.system },
-        { role: 'user', content: userRap }
-    ];
-
+    // AI Rapper
     const rapperRes = await c.env.AI.run('@cf/meta/llama-3-8b-instruct', {
-        messages: rapperPrompt
+        messages: [
+            { role : 'system', content: opponentConfig.system },
+            { role: 'user', content: userRap }
+        ]
     });
-
     const aiVerse = rapperRes.response;
 
-    // FIX: Corrected JSON example to prevent LLM confusion
-    const judgeSystemPrompt = `
-    You are a rap battle judge. Compare these two verses. Rate each 1-10 on Rhyme, Flow, Insults, and Creativity.
-    Output ONLY valid JSON like this:
-    {
-        "user": { "rhyme": 5, "flow": 5, "creativity": 5 },
-        "ai": { "rhyme": 5, "flow": 5, "creativity": 5 },
-        "comment": "The AI had a better flow"
-    }
-    `;
-
+    // AI Judge
     const judgeRes = await c.env.AI.run('@cf/meta/llama-3-8b-instruct', {
         messages: [
-            { role: 'system', content: judgeSystemPrompt },
-            { role: 'user', content: `User Verse: "${userRap}"\nAI (${opponentConfig.name}) Verse: "${aiVerse}"`}
+            { 
+                role: 'system', 
+                content: `You are a strict rap battle judge. Rate each 1-10 on Rhyme, Flow, Insults, Creativity.
+                IMPORTANT RULES:
+                1. Output ONLY valid JSON.
+                2. Do NOT write any text before or after the JSON.
+                3. Do NOT use double quotes (") inside your strings. Use single quotes (').
+                
+                Example format:
+                { "user": { "rhyme": 5, "flow": 5, "creativity": 5 }, "ai": { "rhyme": 5, "flow": 5, "creativity": 5 }, "comment": "Good flow." }`
+            },
+            { role: 'user', content: `User: "${userRap}"\nAI: "${aiVerse}"`}
         ]
     });
 
@@ -114,27 +90,36 @@ app.post('/battle', async (c) => {
 
     const result = scores.user.total > scores.ai.total ? "win" : "loss";
     
+    // Update DB AND Leaderboard
     if (username !== 'guest') {
         try {
             const id = c.env.USER_PROFILE.idFromName(username);
             const stub = c.env.USER_PROFILE.get(id);
-            await stub.fetch('http://do/update', {
+            
+            // 1. Update Personal Stats
+            const userUpdateRes = await stub.fetch('http://do/update', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ result: result })
             });
+            const userData = await userUpdateRes.json();
+
+            // 2. Update Global Leaderboard
+            if (result === 'win' && userData.wins) {
+                const lbId = c.env.LEADERBOARD.idFromName("GLOBAL");
+                const lbStub = c.env.LEADERBOARD.get(lbId);
+                await lbStub.fetch('http://do/submit', {
+                    method: 'POST',
+                    body: JSON.stringify({ username, wins: userData.wins })
+                });
+            }
+
         } catch (e) {
             console.error('Failed to update stats', e);
         }
     }
 
-    return c.json({
-        userRap: userRap,
-        aiVerse: aiVerse,
-        result: result,
-        scores: scores,
-        opponent: opponentConfig.name 
-    });
+    return c.json({ userRap, aiVerse, result, scores, opponent: opponentConfig.name });
 });
 
 app.post('/transcribe', async (c) => {
@@ -161,33 +146,120 @@ app.post('/speak', async (c) => {
     const { text } = await c.req.json();
     try {
         const response = await c.env.AI.run('@cf/myshell-ai/melotts', {
-            prompt: text,
-			lang: 'en',
+            prompt: text, lang: 'en',
         });
         
         const base64Audio = response.audio;
+        if (!base64Audio) throw new Error('No audio data returned from model');
 
-		if (!base64Audio) {
-			throw new Error('No audio data returned from model');
-		}
+        const binaryString = atob(base64Audio);
+        const len = binaryString.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) {
+            bytes[i] = binaryString.charCodeAt(i);
+        }
 
-		const binaryString = atob(base64Audio);
-		const len = binaryString.length;
-		const bytes = new Uint8Array(len);
-		for (let i = 0; i < len; i++) {
-			bytes[i] = binaryString.charCodeAt(i);
-		}
-
-		// send as audio file
-		return new Response(bytes.buffer, {
-			headers: { 'Content-Type': 'audio/mpeg' }
-		});
-		
+        return new Response(bytes.buffer, {
+            headers: { 'Content-Type': 'audio/mpeg' }
+        });
+        
     } catch(e) {
-        console.error('TTS Error:', e);
         return c.json({ error: 'TTS Failed' }, 500);
     }
 });
 
+// CREATE CHALLENGE (P1)
+app.post('/challenge/create', async (c) => {
+    const { username, verse } = await c.req.json();
+
+    const id = c.env.CHALLENGE.newUniqueId();
+    const hexId = id.toString();
+
+    const stub = c.env.CHALLENGE.get(id);
+    await stub.fetch('http://do/create', {
+        method: 'POST',
+        headers: { 'Content-Type' : 'application/json' },
+        body: JSON.stringify({ username, verse })
+    });
+
+    return c.json({ battleId: hexId });
+})
+
+//  GET (Load Challenge Info)
+app.get('/challenge/:id', async (c) => {
+    const hexId = c.req.param('id');
+    try {
+        const id = c.env.CHALLENGE.idFromString(hexId);
+        const stub = c.env.CHALLENGE.get(id);
+        const res = await stub.fetch('http://do/state');
+        const data = await res.json();
+        return c.json(data);
+    } catch (e) {
+        return c.json({ error: "Battle Not Found" }, 404);
+    }
+})
+
+// REPLY TO CHALLENGE (P2 submits)
+app.post('/challenge/:id/reply', async (c) => {
+    const hexId = c.req.param('id');
+    const { username, verse } = await c.req.json();
+    const id = c.env.CHALLENGE.idFromString(hexId);
+    const stub = c.env.CHALLENGE.get(id);
+
+    // SAVE P2 VERSE
+    const joinRes = await stub.fetch('http://do/join', {
+        method: 'POST',
+        body: JSON.stringify({ username, verse })
+    });
+
+    if (!joinRes.ok) return c.json({ error: "Cannot join battle"}, 400);
+    const battleState = await joinRes.json();
+
+    // AI JUDGE (P1 vs P2)
+    const judgeRes = await c.env.AI.run('@cf/meta/llama-3-8b-instruct', {
+        messages: [
+            {
+                role: 'system',
+                content: `Judge this rap battle between ${battleState.p1.name} and ${battleState.p2.name}. 
+                Output JSON only: { "p1_score": 5, "p2_score": 5, "comment": "..." }`
+            },
+            { 
+                role: 'user', 
+                content: `${battleState.p1.name}: "${battleState.p1.verse}"\n${battleState.p2.name}: "${battleState.p2.verse}"` 
+            },
+        ],
+    });
+
+    let resultData = { p1_score: 0, p2_score: 0, comment: "Error" };
+    try {
+        const match = judgeRes.response.match(/\{[\s\S]*\}/);
+        if (match) resultData = JSON.parse(match[0]);
+    } catch (e) {
+        console.error("Judge Error", e);
+    }
+
+    const winner = resultData.p1_score > resultData.p2_score ? 'p1_win' : 'p2_win';
+
+    await stub.fetch('http://do/finish', {
+        method: 'POST',
+        body: JSON.stringify({ result: winner, scores: resultData })
+    });
+
+    return c.json({ winner, scores: resultData });
+})
+
+app.get('/leaderboard', async (c) => {
+    try {
+        const id = c.env.LEADERBOARD.idFromName("GLOBAL");
+        const stub = c.env.LEADERBOARD.get(id);
+        const response = await stub.fetch(c.req.raw); 
+        const data = await response.json();
+        return c.json(data);
+    } catch (e) {
+        console.error('Leaderboard Error:', e);
+        return c.json([], 200);
+    }
+});
+
 export default app;
-export { UserProfile } from './UserProfile';
+export { UserProfile, Leaderboard, Challenge };
