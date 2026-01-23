@@ -204,5 +204,23 @@ app.get('/profile/:username', async (c) => {
 	});
 });
 
+app.post('/speak', async (c) => {
+	const { text } = await c.req.json();
+
+	try {
+		const response = await c.env.AI.run('@cf/suno/bark', {
+			prompt: text
+		});
+
+		return new Response(response, {
+			headers: { 'Content-Type': 'audio/wav' }
+		});
+		
+	} catch(e) {
+		console.error('TTS Error:', e);
+		return c.json({ error: 'TTS Failed' }, 500);
+	}
+});
+
 export default app;
 export { UserProfile } from './UserProfile'

@@ -205,15 +205,47 @@ async function sendBattleData(payload, type) {
         const res = await fetch('/battle', options);
         const data = await res.json();
 
+        console.log('Received Response from /battle:', data);
+
         // save data
         saveToHistory(data);
 
         loadStats();
-        status.innerText = "Ready";
+        
+        await playAudio(data.aiVerse, data.opponent);
 
     } catch (e) {
         alert("Error: " + e.message);
     }
 
     btn.disabled = false;
-}`;
+}`
+
+async function playAudio(text, opponent) {
+    const status = document.getElementById('status');
+    status.innerText = 'Generating Audio...';
+
+    try {
+        const res = await fetch('/speak', {
+            method: 'POST',
+            headers: { 'Content-Type' : 'application/json' },
+            body: JSON.stringify({ text, character: opponent})
+        });
+
+        if (!res.ok) throw new Error("Audio gen failed");
+
+        const blob = await res.blob();
+        const audioUrl = URL.createObjectURL(blob);
+        const audio = new Audio(audioUrl);
+
+        status.innerText = "Playing Verse...";
+        audio.play();
+
+        audio.onended = () => {
+            status.innerText = "Ready";
+        }
+    } catch (e) {
+        console.error('Audio Error:', e);
+        status.innerText = 'Audio Failed';
+    }
+}
