@@ -1,119 +1,79 @@
-/** @jsx jsx */
 import { Hono } from 'hono';
-import { MainPage } from './ui';
-import { clientScript } from './client';
-import { jsx } from 'hono/jsx';
+import { cors } from 'hono/cors'; // Important for separate frontend
 import { UserProfile } from './UserProfile';
 
 const app = new Hono();
 
+// ALLOW FRONTEND TO TALK TO BACKEND
+app.use('/*', cors());
+
+// CONFIG
 const OPPONENTS = {
     'roboflow': {
         name: 'RoboFlow',
-        // Easy mode: Simple instructions
-        system: 'You are RoboFlow, a basic battle rapper. Keep rhymes simple (AABB). Be mildly competitive but not too mean. CRITICAL FOR AUDIO: End every single line with a comma or period to ensure the voice pauses correctly.',
+        system: 'You are RoboFlow, a basic battle rapper. Keep rhymes simple (AABB). Be mildly competitive but not too mean. CRITICAL FOR AUDIO: End every single line with a comma or period.',
         difficultyModifier: 0 
     },
     'bytebeater': {
         name: 'ByteBeater',
-        // Hard mode: Complex flow instructions
-        system: 'You are ByteBeater, an elite technical lyricist. Use multi-syllabic rhymes, complex metaphors, and aggressive flows. DESTROY your opponent. CRITICAL FOR AUDIO: Use commas frequently within lines to create a choppy, aggressive rhythm. End every line with a period.',
+        system: 'You are ByteBeater, an elite technical lyricist. Use multi-syllabic rhymes, complex metaphors, and aggressive flows. DESTROY your opponent. CRITICAL FOR AUDIO: Use commas frequently within lines.',
         difficultyModifier: 3
     },
     'ai-ce': {
         name: 'AI-CE',
-        // Funny mode: Comedic timing instructions
-        system: 'You are AI-CE, a goofy, clownish rapper. Your goal is to be funny. Roast the user but also make self-deprecating jokes. Use slang. CRITICAL FOR AUDIO: End every line with a comma or period to perfect your comedic timing.',
+        system: 'You are AI-CE, a goofy, clownish rapper. Your goal is to be funny. Roast the user but also make self-deprecating jokes. Use slang. CRITICAL FOR AUDIO: End every line with a comma.',
         difficultyModifier: -2 
     }
 };
 
-app.get('/', (c) => c.html(<MainPage />));
+// --- ROUTES ---
 
-app.get('/client.js', (c) => {
-    return c.text(clientScript, 200, {
-        'Content-Type': 'application/javascript',
-    });
-});
-
+// 1. Battle Route
 app.post('/battle', async (c) => {
     let userRap = "";
     let username = c.req.header('X-Username') || 'guest';
-    const contentType = c.req.header('Content-Type') || '';
-    let opponentID = 'roboflow';
-
-    if (contentType.includes('application/json')) {
-        const body = await c.req.json();
-        userRap = body.userRap || 'freestyle';
-        if (body.username) username = body.username;
-        if (body.opponent) opponentID = body.opponent;
-    } else {
-        const audioData = await c.req.arrayBuffer();
-        opponentID = c.req.header('X-Opponent') || 'roboflow';
-        const transcription = await c.env.AI.run('@cf/openai/whisper', {
-            audio: [...new Uint8Array(audioData)]
-        });
-        userRap = transcription.text;
-    }
+    const body = await c.req.json();
+    
+    userRap = body.userRap || 'freestyle';
+    const opponentID = body.opponent || 'roboflow';
 
     const opponentConfig = OPPONENTS[opponentID] || OPPONENTS['roboflow'];
     
-    const rapperPrompt = [
-        { role : 'system', content: opponentConfig.system },
-        { role: 'user', content: userRap }
-    ];
-
+    // AI Rapper
     const rapperRes = await c.env.AI.run('@cf/meta/llama-3-8b-instruct', {
-        messages: rapperPrompt
+        messages: [
+            { role : 'system', content: opponentConfig.system },
+            { role: 'user', content: userRap }
+        ]
     });
-
     const aiVerse = rapperRes.response;
 
-    // FIX: Corrected JSON example to prevent LLM confusion
-    const judgeSystemPrompt = `
-    You are a rap battle judge. Compare these two verses. Rate each 1-10 on Rhyme, Flow, Insults, and Creativity.
-    Output ONLY valid JSON like this:
-    {
-        "user": { "rhyme": 5, "flow": 5, "creativity": 5 },
-        "ai": { "rhyme": 5, "flow": 5, "creativity": 5 },
-        "comment": "The AI had a better flow"
-    }
-    `;
-
+    // AI Judge
     const judgeRes = await c.env.AI.run('@cf/meta/llama-3-8b-instruct', {
         messages: [
-            { role: 'system', content: judgeSystemPrompt },
-            { role: 'user', content: `User Verse: "${userRap}"\nAI (${opponentConfig.name}) Verse: "${aiVerse}"`}
+            { role: 'system', content: `You are a rap battle judge. Rate each 1-10 on Rhyme, Flow, Insults, Creativity. Output JSON: { "user": { "rhyme": 5, "flow": 5 }, "ai": { "rhyme": 5, "flow": 5 }, "comment": "..." }` },
+            { role: 'user', content: `User: "${userRap}"\nAI: "${aiVerse}"`}
         ]
     });
 
-    let scores = {
-        user: { total: 0 },
-        ai: { total: 0 },
-        comment: "Judging Error"
-    };
-
+    let scores = { user: { total: 0 }, ai: { total: 0 }, comment: "Judge Error" };
     try {
-        const raw = judgeRes.response;
-        const jsonMatch = raw.match(/\{[\s\S]*\}/);
+        const jsonMatch = judgeRes.response.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
             const parsed = JSON.parse(jsonMatch[0]);
-            
-            const u = parsed.user || {};
+            const u = parsed.user || {}; 
             const a = parsed.ai || {};
             
-            scores.user = { ...u, total: (u.rhyme||0) + (u.flow||0) + (u.insults||0) + (u.creativity||0) };
-            scores.ai = { ...a, total: (a.rhyme||0) + (a.flow||0) + (a.insults||0) + (a.creativity||0) };
+            scores.user = { ...u, total: (u.rhyme||0) + (u.flow||0) + (u.insults||0) };
+            scores.ai = { ...a, total: (a.rhyme||0) + (a.flow||0) + (a.insults||0) };
             scores.comment = parsed.comment || "Close battle.";
-            
             scores.ai.total += opponentConfig.difficultyModifier;
         }
-    } catch (e) {
-        console.error('Judge Error', e);
-    }
+    } catch (e) { console.error('Judge Error', e); }
 
     const result = scores.user.total > scores.ai.total ? "win" : "loss";
     
+    // Update DB
     if (username !== 'guest') {
         try {
             const id = c.env.USER_PROFILE.idFromName(username);
@@ -121,33 +81,37 @@ app.post('/battle', async (c) => {
             await stub.fetch('http://do/update', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ result: result })
+                body: JSON.stringify({ result })
             });
-        } catch (e) {
-            console.error('Failed to update stats', e);
-        }
+        } catch (e) { console.error('Stats Error', e); }
     }
 
-    return c.json({
-        userRap: userRap,
-        aiVerse: aiVerse,
-        result: result,
-        scores: scores,
-        opponent: opponentConfig.name 
-    });
+    return c.json({ userRap, aiVerse, result, scores, opponent: opponentConfig.name });
 });
 
-app.post('/transcribe', async (c) => {
-    const audioData = await c.req.arrayBuffer();
-    if (!audioData || audioData.byteLength === 0) {
-        return c.json({ error: 'No audio data received' }, 400);
+// 2. TTS Route
+app.post('/speak', async (c) => {
+    const { text } = await c.req.json();
+    try {
+        const response = await c.env.AI.run('@cf/myshell-ai/melotts', {
+            prompt: text, lang: 'en'
+        });
+        
+        const base64Audio = response.audio;
+        if (!base64Audio) throw new Error('No audio returned');
+
+        const binaryString = atob(base64Audio);
+        const len = binaryString.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) bytes[i] = binaryString.charCodeAt(i);
+
+        return new Response(bytes.buffer, { headers: { 'Content-Type': 'audio/mpeg' } });
+    } catch(e) {
+        return c.json({ error: 'TTS Failed' }, 500);
     }
-    const response = await c.env.AI.run('@cf/openai/whisper', {
-        audio: [...new Uint8Array(audioData)]
-    });
-    return c.json({ text: response.text });
 });
 
+// 3. Stats Route
 app.get('/profile/:username', async (c) => {
     const username = c.req.param('username');
     const id = c.env.USER_PROFILE.idFromName(username);
@@ -155,38 +119,6 @@ app.get('/profile/:username', async (c) => {
     const response = await obj.fetch('http://do/stats');
     const stats = await response.json();
     return c.json({ user: username, data: stats });
-});
-
-app.post('/speak', async (c) => {
-    const { text } = await c.req.json();
-    try {
-        const response = await c.env.AI.run('@cf/myshell-ai/melotts', {
-            prompt: text,
-			lang: 'en',
-        });
-        
-        const base64Audio = response.audio;
-
-		if (!base64Audio) {
-			throw new Error('No audio data returned from model');
-		}
-
-		const binaryString = atob(base64Audio);
-		const len = binaryString.length;
-		const bytes = new Uint8Array(len);
-		for (let i = 0; i < len; i++) {
-			bytes[i] = binaryString.charCodeAt(i);
-		}
-
-		// send as audio file
-		return new Response(bytes.buffer, {
-			headers: { 'Content-Type': 'audio/mpeg' }
-		});
-		
-    } catch(e) {
-        console.error('TTS Error:', e);
-        return c.json({ error: 'TTS Failed' }, 500);
-    }
 });
 
 export default app;
