@@ -4,6 +4,7 @@ export const clientScript =
 let username = localStorage.getItem('rapper_name');
 let mediaRecorder;
 let audioChunks = [];
+let audioCache = {};
 
 // initialization
 if (!username) {
@@ -90,7 +91,11 @@ function renderEntry(data) {
     const aScore = s.ai || { total: 0, rhyme: 0, flow: 0, insults: 0, creativity: 0 };
 
     // add unique ID for audio btn
-    const audioBtnId = 'audio-btn-' + Date.now() + Math.random();
+    const btnId = 'btn-' + data.id;
+    const isCached = !!audioCache[data.id];
+
+    // if cahced, show play, if not, show generate
+    const btnText = isCached ? 'Play Audio' : 'Generate Audio';
     
     // build HTML
     entry.innerHTML = \`
@@ -125,15 +130,70 @@ function renderEntry(data) {
        <div class="verse ai">
             <strong>AI:</strong><br>\${aiText}
             </br></br>
-            <button id="\${audioBtnId}">Play Audio</button>
+            <button id="\${btnId}">Play Audio</button>
         </div> 
     \`;
     log.appendChild(entry);
 
     setTimeout(() => {
-        const btn = document.getElementById(audioBtnId);
-        if (btn) btn.onclick = () => playAudio(aiText, data.opponent);
+        const btn = document.getElementById(btnId);
+        if (btn) {
+            btn.onclick = () => handleAudioClick(data.id, aiText, data.opponent, btnId);
+        }
     }, 0);
+}
+
+// unified audio handler
+async function handleAudioClick(id, text, opponent, btnId) {
+    const btn = document.getElementById(btnId);
+
+    // play if cached
+    if (audioCache[id]) {
+        console.log("Playing from cache...");
+        const audio = new Audio(audioCache[id]);
+        btn.innerText = "Playing...";
+        audio.play();
+        audio.onended = () => { btn.innerText = 'Play Audio'; };
+        return;
+    }
+
+    // generate if new
+    btn.innerText = "Generating...";
+    btn.disabled = true;
+
+    try {
+        const res = await fetch('/speak', {
+            method: 'POST',
+            headers: { 'Content-Type' : 'application/json' },
+            body: JSON.stringify({ text, character: opponent })
+        });
+
+        if (!res.ok) throw new Error("Audio gen failed");
+
+        const blob = await res.blob();
+        const audioUrl = URL.createObjectURL(blob);
+
+        // save to cache
+        audioCache[id] = audioUrl;
+
+        // Play immediately
+        const audio = new Audio(audioUrl);
+        audio.play();
+        
+        // Update Button State to "Play"
+        btn.disabled = false;
+        btn.style.background = '#4CAF50';
+        btn.innerText = "🔊 Playing...";
+        
+        audio.onended = () => { 
+            btn.innerText = "▶️ Play Audio"; 
+        };
+
+    } catch (e) {
+        console.error('Audio Error:', e);
+        btn.innerText = "❌ Error";
+        btn.disabled = false;
+    }
 }
 
 // microphone logic
@@ -159,7 +219,7 @@ async function toggleMic() {
 
             mediaRecorder.start();
             micBtn.setAttribute('data-recording', 'true');
-            micBtn.innerText = 'Recording...';
+            micBtn.innerText = 'Stop...';
         } catch (err) {
             alert("Mic Error: " + err.message);
         }
@@ -168,7 +228,6 @@ async function toggleMic() {
         mediaRecorder.stop();
         micBtn.setAttribute('data-recording', 'false');
         micBtn.innerText = 'Record';
-        status.innerText = 'Processing';
     }
 }
 
