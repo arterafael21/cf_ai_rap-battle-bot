@@ -128,7 +128,7 @@ app.post('/battle', async (c) => {
 		console.error('Judge Error', e);
 	}
 
-	const result = scores.user.total > scores.ai.total ? "win" : "lose";
+	const result = scores.user.total > scores.ai.total ? "win" : "loss";
 	console.log(`--- 6. Winner Calculated: ${result} (User: ${scores.user.total} vs AI: ${scores.ai.total})`);
 	
 	// update database
@@ -208,8 +208,10 @@ app.post('/speak', async (c) => {
 	const { text } = await c.req.json();
 
 	try {
-		const response = await c.env.AI.run('@cf/suno/bark', {
-			prompt: text
+		const response = await c.env.AI.run('@cf/myshell/melotts-english', {
+			text: text,
+			locale: 'en-US',
+			speed: 1.0
 		});
 
 		return new Response(response, {

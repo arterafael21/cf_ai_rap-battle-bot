@@ -13,13 +13,19 @@ app.get('/stats', async (c) => {
         rank: "Novice",
         style: "Freestyle"
     };
+
+    let rank = "Novice";
+    if (stats.wins > 5) rank = "Amateur";
+    if (stats.wins > 20) rank = "Pro";
+    if (stats.wins > 50) rank = "Rap God";
+    stats.rank = rank;
     return c.json(stats);
 });
 
 app.post('/update', async (c) => {
     const storage = c.env.storage;
     const body = await c.req.json();
-
+    
     let stats = await storage.get("stats") || { wins: 0, losses: 0, rank: "Novice"};
 
     if (body.result === "win") stats.wins += 1;

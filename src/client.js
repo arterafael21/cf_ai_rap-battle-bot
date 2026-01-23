@@ -89,8 +89,10 @@ function renderEntry(data) {
     const uScore = s.user || { total: 0, rhyme: 0, flow: 0, insults: 0, creativity: 0 };
     const aScore = s.ai || { total: 0, rhyme: 0, flow: 0, insults: 0, creativity: 0 };
 
+    // add unique ID for audio btn
+    const audioBtnId = 'audio-btn-' + Date.now() + Math.random();
+    
     // build HTML
-    // 3. Build HTML
     entry.innerHTML = \`
        <div class="verse"><strong>YOU:</strong><br>\${userText}</div>
        
@@ -120,9 +122,18 @@ function renderEntry(data) {
            <div class="judge-comment"> \${s.comment}</div>
        </div>
 
-       <div class="verse ai"><strong>AI:</strong><br>\${aiText}</div> 
+       <div class="verse ai">
+            <strong>AI:</strong><br>\${aiText}
+            </br></br>
+            <button id="\${audioBtnId}">Play Audio</button>
+        </div> 
     \`;
     log.appendChild(entry);
+
+    setTimeout(() => {
+        const btn = document.getElementById(audioBtnId);
+        if (btn) btn.onclick = () => playAudio(aiText, data.opponent);
+    }, 0);
 }
 
 // microphone logic
@@ -212,14 +223,12 @@ async function sendBattleData(payload, type) {
 
         loadStats();
         
-        await playAudio(data.aiVerse, data.opponent);
-
     } catch (e) {
         alert("Error: " + e.message);
     }
 
     btn.disabled = false;
-}`
+}
 
 async function playAudio(text, opponent) {
     const status = document.getElementById('status');
@@ -248,4 +257,4 @@ async function playAudio(text, opponent) {
         console.error('Audio Error:', e);
         status.innerText = 'Audio Failed';
     }
-}
+}`;
