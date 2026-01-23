@@ -123,6 +123,7 @@ function RapBattleApp() {
 			data.id = `battle-${Date.now()}`;
 			saveHistory(data);
 			setInput(''); // Clear input
+      fetchLeaderboard();
 		} catch (e) {
 			alert(e.message);
 			setStatus('Error');
@@ -347,7 +348,19 @@ function RapBattleApp() {
 
           <Tabs.Panel value="leaderboard" pt="xs">
             <Card shadow="sm" padding="lg" radius="md" withBorder>
-              <Title order={3} mb="md">Top 10 MCs</Title>
+
+              <Group justify="space-between" mb="md">
+                <Title order={3}>Top 10 MCs</Title>
+                <Button 
+                   variant="light" 
+                   size="xs" 
+                   onClick={fetchLeaderboard} 
+                   leftSection={<IconTrophy size={14}/>}
+                >
+                   Refresh Board
+                </Button>
+              </Group>
+
               <Table striped highlightOnHover>
                 <Table.Thead>
                   <Table.Tr>

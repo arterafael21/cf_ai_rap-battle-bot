@@ -10,24 +10,24 @@ app.use('/*', cors());
 
 // CONFIG
 const OPPONENTS = {
-	roboflow: {
-		name: 'RoboFlow',
-		system:
-			'You are RoboFlow, a basic battle rapper. Keep rhymes simple (AABB). Be mildly competitive but not too mean. CRITICAL FOR AUDIO: End every single line/bar with a comma or period.',
-		difficultyModifier: 0,
-	},
-	bytebeater: {
-		name: 'ByteBeater',
-		system:
-			'You are ByteBeater, an elite technical lyricist. Use multi-syllabic rhymes, complex metaphors, and aggressive flows. DESTROY your opponent. CRITICAL FOR AUDIO: Use commas frequently within lines to mimic flow/pauses.',
-		difficultyModifier: 3,
-	},
-	'ai-ce': {
-		name: 'AI-CE',
-		system:
-			'You are AI-CE, a goofy, clownish rapper. Your goal is to be funny. Roast the user but also make self-deprecating jokes. Use slang. CRITICAL FOR AUDIO: End every line with a comma.',
-		difficultyModifier: -2,
-	},
+    roboflow: {
+        name: 'RoboFlow',
+        system:
+            'You are RoboFlow, a basic battle rapper. Keep rhymes simple (AABB). Be mildly competitive but not too mean. Match the number of lines the User gives in their verse. CRITICAL FOR AUDIO: End every single line/bar with a literal comma "," or period "."',
+        difficultyModifier: 0,
+    },
+    bytebeater: {
+        name: 'ByteBeater',
+        system:
+            'You are ByteBeater, an elite technical lyricist. Use multi-syllabic rhymes, complex metaphors, and aggressive flows. DESTROY your opponent. CRITICAL FOR AUDIO: Use commas (",") frequently within lines to mimic flow/pauses.',
+        difficultyModifier: 3,
+    },
+    'ai-ce': {
+        name: 'AI-CE',
+        system:
+            'You are AI-CE, a goofy, clownish rapper. Your goal is to be funny. Roast the user but also make self-deprecating jokes. Use slang. Match the number of lines the User gives in their verse. CRITICAL FOR AUDIO: End every line with a comma (",").',
+        difficultyModifier: -2,
+    },
 };
 
 // --- ROUTES ---
@@ -54,14 +54,26 @@ app.post('/battle', async (c) => {
 
 	// AI Judge
 	const judgeRes = await c.env.AI.run('@cf/meta/llama-3-8b-instruct', {
-		messages: [
-			{
-				role: 'system',
-				content: `You are a rap battle judge. Rate each 1-10 on Rhyme, Flow, Insults, Creativity. Output JSON: { "user": { "rhyme": 5, "flow": 5 }, "ai": { "rhyme": 5, "flow": 5 }, "comment": "..." }`,
-			},
-			{ role: 'user', content: `User: "${userRap}"\nAI: "${aiVerse}"` },
-		],
-	});
+        messages: [
+            {
+                role: 'system',
+                content: `You are a strict rap battle judge. Rate each 1-10 on Rhyme, Flow, Insults, Creativity.
+                
+                IMPORTANT RULES:
+                1. Output ONLY valid JSON. 
+                2. Do NOT write any text/markdown before or after the JSON.
+                3. Do NOT use double quotes (") inside your comment strings. Use single quotes (') instead.
+                
+                Example format:
+                { "user": { "rhyme": 5, "flow": 5, "insults": 5, "creativity": 5 }, "ai": { "rhyme": 5, "flow": 5, "insults": 5, "creativity": 5 }, "comment": "The flow was good." }`
+            },
+            { role: 'user', content: `User: "${userRap}"\nAI: "${aiVerse}"` },
+        ],
+    });
+
+	console.log("--- RAW JUDGE OUTPUT ---");
+    console.log(judgeRes.response);
+    console.log("------------------------");
 
 	let scores = { user: { total: 0 }, ai: { total: 0 }, comment: 'Judge Error' };
 	try {
@@ -71,10 +83,17 @@ app.post('/battle', async (c) => {
 			const u = parsed.user || {};
 			const a = parsed.ai || {};
 
-			scores.user = { ...u, total: (u.rhyme || 0) + (u.flow || 0) + (u.insults || 0) };
-			scores.ai = { ...a, total: (a.rhyme || 0) + (a.flow || 0) + (a.insults || 0) };
+			scores.user = { 
+                ...u, 
+                total: (u.rhyme||0) + (u.flow||0) + (u.insults||0) + (u.creativity||0) 
+            };
+            scores.ai = { 
+                ...a, 
+                total: (a.rhyme||0) + (a.flow||0) + (a.insults||0) + (a.creativity||0) 
+            };
 			scores.comment = parsed.comment || 'Close battle.';
-			scores.ai.total += opponentConfig.difficultyModifier;
+			// scores.ai.total += opponentConfig.difficultyModifier;
+			scores.ai.total =0;
 		}
 	} catch (e) {
 		console.error('Judge Error', e);
