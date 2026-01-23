@@ -24,33 +24,49 @@ export const MainPage = () => {
 
                 {/* SECTION: STATS */}
                 <div id="stats-panel">
-                <h3>Stats</h3>
-                <ul>
-                    <li>Wins: <span id="wins">0</span></li>
-                    <li>Losses: <span id="losses">0</span></li>
-                    <li>Rank: <span id="rank">Novice</span></li>
-                </ul>
+                    <h3>Stats</h3>
+                    <ul>
+                        <li>Wins: <span id="wins">0</span></li>
+                        <li>Losses: <span id="losses">0</span></li>
+                        <li>Rank: <span id="rank">Novice</span></li>
+                    </ul>
                 </div>
 
                 {/* SECTION: INPUT */}
                 <div id="battle-panel">
-                <h3>Battle Arena</h3>
-                <div>
-                    <textarea type="text" id="userRap" placeholder="Enter your rap..." rows="4" cols="50"></textarea>
-                </div>
-                <br />
-                <div>
-                    <button id="mic-btn" data-recording="false">🎤 Record</button>
-                    <button id="battle-btn">Submit Verse</button>
-                </div>
-                <div id="status">Ready</div>
-                </div>
+                    <h3>Choose Your Opponent</h3>
+                    <div id="opponent-selector">
+                        <label class="opponent-option">
+                            <input type="radio" name="opponent" value="roboflow" checked /> 
+                            <strong>RoboFlow</strong> (Easy) - Basic rhymes, standard flow
+                        </label>
+                        <label class="opponent-option">
+                            <input type="radio" name="opponent" value="bytebeater" /> 
+                            <strong>ByteBeater</strong> (Hard) - Complex schemes, aggressive
+                        </label>
+                        <label class="opponent-option">
+                            <input type="radio" name="opponent" value="ai-ce" /> 
+                            <strong>AI-CE</strong> (Funny) - Roast specialist, goofy style
+                        </label>
+                    </div>
 
-                {/* SECTION: RESULTS */}
-                <div id="results-panel">
-                <h3>History</h3>
-                <div id="battle-log"></div>
-                <button id="clear-btn">Clear History</button>
+                    <h3>Drop Your Verse</h3>
+                    <div>
+                        <textarea type="text" id="userRap" placeholder="Enter your rap..." rows="4" cols="50"></textarea>
+                    </div>
+                    <br />
+                    <div>
+                        <button id="mic-btn" data-recording="false">🎤 Record</button>
+                        <button id="battle-btn">Submit Verse</button>
+                    </div>
+                    <div id="status">Ready</div>
+                    </div>
+
+                    {/* SECTION: RESULTS */}
+                    <div id="results-panel">
+                    <h3>History</h3>
+                    <div id="battle-log"></div>
+                    <button id="clear-btn">Clear History</button>
                 </div>
             </body>
         </html>

@@ -82,6 +82,9 @@ function renderEntry(data) {
     const userText = data.userRap || data.user || "";
     const aiText = data.aiVerse || data.ai || "";
 
+    // show who you fought
+    const opponentName = data.opponent ? data.opponent.toUpperCase() : "UNKNOWN";
+
     const s = data.scores || { user: {}, ai: {}, comment: 'Legacy Battle' };
     const uScore = s.user || { total: 0, rhyme: 0, flow: 0, insults: 0, creativity: 0 };
     const aScore = s.ai || { total: 0, rhyme: 0, flow: 0, insults: 0, creativity: 0 };
@@ -161,13 +164,18 @@ async function toggleMic() {
 // battle logic (text or audio)
 async function startBattle(type) {
     const userRapInput = document.getElementById('userRap');
-    const status = document.getElementById('status');
+
+    // get selected opp
+    const opponentInput = document.querySelector('input[name="opponent"]:checked');
+    const opponent = opponentInput ? opponentInput.value : 'roboflow';
 
     if (type === 'text') {
         if (!userRapInput.value) return alert('Do not be a chump. Freestyle!');
-        status.innerText = "Sending your verse...";
 
-        await sendBattleData({ userRap: userRapInput.value }, 'text');
+        await sendBattleData({ 
+            userRap: userRapInput.value,
+            opponent: opponent
+        }, 'text');
 
         userRap.value = ""; // clear input
     }
@@ -175,7 +183,9 @@ async function startBattle(type) {
 
 async function sendBattleData(payload, type) {
     const btn = document.getElementById('battle-btn');
+    const status = document.getElementById('status');
     btn.disabled = true;
+    status.innerText = "Battling..."
 
     try {
         const options = {
@@ -188,6 +198,7 @@ async function sendBattleData(payload, type) {
             options.body = JSON.stringify(payload);
         } else {
             options.headers['Content-Type'] = 'audio/webm';
+            options.headers['X-Opponent'] = document.querySelector('input[name="opponent"]:checked').value;
             options.body = payload;
         }
 
@@ -198,7 +209,7 @@ async function sendBattleData(payload, type) {
         saveToHistory(data);
 
         loadStats();
-        document.getElementById('status').innerText = "Ready";
+        status.innerText = "Ready";
 
     } catch (e) {
         alert("Error: " + e.message);

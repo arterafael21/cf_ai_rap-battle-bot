@@ -7,6 +7,24 @@ import { UserProfile } from './UserProfile'
 
 const app = new Hono();
 
+const OPPONENTS = {
+	'roboflow': {
+		name: 'RoboFlow',
+		system: 'You are RoboFlow, a basic battle rapper. Keep rhymes simple (AABB). Be mildly competitive but not too mean.',
+		difficultyModifier: 0 // normal scoring
+	},
+	'bytebeater': {
+		name: 'ByteBeater',
+		system: 'You are ByteBeater, an elite technical lyricist. Use multi-syllabic rhymes, complex metaphors, and aggresive flows. DESTROY your opponent.',
+		difficultyModifier: 3
+	},
+	'ai-ce': {
+		name: 'AI-CE',
+		system: 'You are AI-CE, a goofy, clownish rapper. Your goal is to be funny. Roast the user but also make self-deprecating jokes. Use slang.',
+		difficultyModifier: -2 // easier to win
+	}
+};
+
 // home page
 app.get('/', (c) => {
 	return c.html(<MainPage />);
@@ -28,26 +46,30 @@ app.post('/battle', async (c) => {
 
 	const contentType = c.req.header('Content-Type') || '';
 
+	let opponentID = 'roboflow'; // default
+
 	if (contentType.includes('application/json')) {
 		const body = await c.req.json();
-		console.log("[Input] JSON Body received:", JSON.stringify(body));
 		userRap = body.userRap || 'freestyle';
-
-		// if body has username, override header
 		if (body.username) username = body.username;
+		if (body.opponent) opponentID = body.opponent;
+		console.log("[Input] JSON Body received:", JSON.stringify(body));
 	} else {
 		// audio 
 		console.log("--- Processing Audio Input ---");
 		const audioData = await c.req.arrayBuffer();
+		opponentID = c.req.header('X-Opponent') || 'roboflow'
 		const transcription = await c.env.AI.run('@cf/openai/whisper', {
 			audio: [...new Uint8Array(audioData)]
 		});
 		userRap = transcription.text;
 		console.log("--- Audio Transcribed:", userRap);
 	}
+
+	const opponentConfig = OPPONENTS[opponentID] || OPPONENTS['roboflow'];
 	
 	const rapperPrompt = [
-		{ role : 'system', content: "You are a battle rapper. Response to the user\'s verse with a 4-line aggressive comeback. Rhyme Scheme AABB, don't start with 'this is the rap'" },
+		{ role : 'system', content: opponentConfig.system },
 		{ role: 'user', content: userRap }
 	];
 
@@ -56,11 +78,12 @@ app.post('/battle', async (c) => {
 	});
 
 	const aiVerse = rapperRes.response;
+
 	console.log("--- [AI Rapper] Verse generated:", aiVerse);
 
 	// run judge
 	const judgeSystemPrompt = `
-	You are a rap battle judge. Compare tehse two verses. Rate each 1-10 on Rhyme, Flow, Insults, Rhetoric, and Creativity/Novelty.
+	You are a rap battle judge. Compare these two verses. Rate each 1-10 on Rhyme, Flow, Insults, Rhetoric, and Creativity/Novelty.
 	Output ONLY valid JSON like this:
 	{
 		"user": { "rhyme": 5, "flow": 5", "creativity": 5 },
@@ -72,7 +95,7 @@ app.post('/battle', async (c) => {
 	const judgeRes = await c.env.AI.run('@cf/meta/llama-3-8b-instruct', {
 		messages: [
 			{ role: 'system', content: judgeSystemPrompt },
-			{ role: 'user', content: `User Verse: "${userRap}"\n\nAI Verse: "${aiVerse}"`}
+			{ role: 'user', content: `User Verse: "${userRap}"\nAI (${opponentConfig.name})\nAI Verse: "${aiVerse}"`}
 		]
 	});
 
@@ -80,8 +103,8 @@ app.post('/battle', async (c) => {
 
 	// parse scores
 	let scores = {
-		user: { total: 0, rhyme: 0, flow: 0, insults: 0, creativity: 0 },
-		ai: { total: 0, rhyme: 0, flow: 0, insults: 0, creativity: 0 },
+		user: { total: 0 },
+		ai: { total: 0 },
 		comment: "Judging Error"
 	};
 
@@ -92,13 +115,14 @@ app.post('/battle', async (c) => {
 			const parsed = JSON.parse(jsonMatch[0]);
 			console.log("--- AI Judge Parsed JSON:", JSON.stringify(parsed));
 
-			// calc totals
 			const u = parsed.user || {};
 			const a = parsed.ai || {};
+			
+			scores.user = { ...u, total: (u.rhyme||0) + (u.flow||0) + (u.insults||0) + (u.creativity||0) };
+            scores.ai = { ...a, total: (a.rhyme||0) + (a.flow||0) + (a.insults||0) + (a.creativity||0) };
+            scores.comment = parsed.comment || "Close battle.";
 
-			scores.user = { ...u, total: (u.rhyme || 0) + (u.flow || 0) + (u.insults || 0) + (u.creativity || 0 ) };
-			scores.ai = { ...a, total: (a.rhyme || 0) + (a.flow || 0) + (a.insults || 0) + (a.creativity || 0) };
-			scores.comment = parsed.comment || "Close battle.";
+			scores.ai.total += opponentConfig.difficultyModifier;
 		}
 	} catch (e) {
 		console.error('Judge Error', e);
@@ -106,6 +130,7 @@ app.post('/battle', async (c) => {
 
 	const result = scores.user.total > scores.ai.total ? "win" : "lose";
 	console.log(`--- 6. Winner Calculated: ${result} (User: ${scores.user.total} vs AI: ${scores.ai.total})`);
+	
 	// update database
 	if (username !== 'guest') {
 		console.log(`Battle Result: ${result} for user: ${username}`);
@@ -133,7 +158,8 @@ app.post('/battle', async (c) => {
 		userRap: userRap,
 		aiVerse: aiVerse,
 		result: result,
-		scores: scores
+		scores: scores,
+		opponent: opponentConfig.name // send back to UI
 	});
 });
 
