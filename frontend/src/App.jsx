@@ -238,59 +238,55 @@ function RapBattleApp() {
 		}
 	};
 
-  // MULTIPLAYER LOGIC
-  const createChallenge = async () => {
-    if (!input) return alert("Write a verse to start a battle!");
-    setIsLoading(true);
-    try {
-      const res = await fetch('/challenge/create', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, verse: input })
-      });
-      const data = await res.json();
-      setBattleCode(data.battleId);
-      setMode('create_success');
-      setInput('');
-    } catch (e) {
-      alert("Failed to create");
-    }
-  };
+  // WEBSOCKET MULTIPLAYER
+  const connectToWebSocket = (roomID, action) => {
+	if (ws.current) ws.current.close();
 
-  const loadChallenge = async () => {
-    if (!battleCode) return;
-    setIsLoading(true);
-    try {
-      const res = await fetch(`/challenge/${battleCode}`);
-      if (!res.ok) throw new Error('Battle not found');
-      const data = await res.json();
-      setP1Data(data.p1);
-      setMode('fight');
-    } catch (e) {
-      alert("Invalid code");
-    }
-  };
+	setStatus('Connecting');
 
-  const submitReply = async () => {
-    if (!input) return alert("You need to rap back!");
-    setIsLoading(true);
-    setStatus("Judging"); 
-    try {
-        const res = await fetch(`/challenge/${battleCode}/reply`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ username, verse: input })
-        });
-        const data = await res.json();
-        setDuelResult(data);
-        setMode('result');
-        setInput('');
-    } catch (e) {
-        alert("Error submitting reply");
-    }
-    setIsLoading(false);
-    setStatus('Ready');
+	const socket = new WebSocket(`ws://127.0.0.1:8787/ws/battle/${roomID}`);
+
+	ws.current = socket;
+
+	socket.onopen = () => {
+		console.log("WS Connected");
+
+		if (action == "CREATE") {
+			socket.send(JSON.stringify({ type: 'CREATE', username, verse: input }));
+			setMode('create_success');
+		}
+		if (action === 'JOIN') {
+			socket.send(JSON.stringify({ type: 'JOIN', username }));
+		}
 	};
+
+	socket.onmessage = (event) => {
+		const msg = JSON.parse(event.data);
+
+		// CASE 1: P2 JOINED
+		if (msg.type == 'OPPONENT_JOINED') {
+			alert(`${msg.username} has entered the ring!`);
+		}
+
+		// CASE 2: START FIGHTING
+		if (msg.type === "BATTLE_START") {
+			setP1Data({ name: msg.opponent, verse: msg.verse });
+			setMode('fight');
+		}
+
+		// CASE 3: LOADING SCREEN
+		if (msg.type === "JUDGING") {
+			setMode('judging');
+		}
+
+		// CASE 4: THE END
+		if (msg.type === 'RESULT') {
+			setDuelResult(msg.result);
+			setMode('result');
+			ws.current.close(); 
+		}
+	}
+  }
 
 	return (
     <Container size="sm" py="xl">
@@ -410,7 +406,7 @@ function RapBattleApp() {
                 </Grid>
             )}
 
-            {/* SCREEN: CREATE */}
+            {/* SCREEN: CREATE (P1 Records) */}
             {mode === 'create' && (
                 <Card shadow="sm" padding="lg" withBorder>
                     <Group mb="md">
@@ -437,12 +433,12 @@ function RapBattleApp() {
                 </Card>
             )}
 
-            {/* SCREEN: CREATE SUCCESS */}
+            {/* SCREEN: CREATE SUCCESS (P1 WAITS) */}
             {mode === 'create_success' && (
                 <Card shadow="sm" padding="xl" withBorder>
                     <Stack align="center">
                         <IconTrophy size={64} color="gold" />
-                        <Title order={3}>Challenge Created!</Title>
+                        <Title order={3}>Battle Room Ready!</Title>
                         <Text>Share this code with your opponent:</Text>
                         
                         <Group>
@@ -455,12 +451,13 @@ function RapBattleApp() {
                                 )}
                             </CopyButton>
                         </Group>
-                        <Button variant="subtle" onClick={() => setMode('menu')}>Back to Menu</Button>
+						<Text c="dimmed" size="xs">Waiting for opponent to join...</Text>
+                        <Button variant="subtle" onClick={() => { ws.current.close(); setMode('menu'); }}>Cancel</Button>
                     </Stack>
                 </Card>
             )}
 
-            {/* SCREEN: JOIN */}
+            {/* SCREEN: JOIN (P2 ENTERS CODE) */}
             {mode === 'join' && (
                 <Card shadow="sm" padding="lg" withBorder>
                     <Group mb="md">
@@ -474,14 +471,14 @@ function RapBattleApp() {
                             value={battleCode} 
                             onChange={(e) => setBattleCode(e.currentTarget.value)}
                         />
-                        <Button onClick={loadChallenge} loading={isLoading} leftSection={<IconSearch size={16}/>}>
-                            Find Battle
+                        <Button onClick={joinMultiplayer} loading={isLoading} leftSection={<IconSearch size={16}/>}>
+                            Join Battle
                         </Button>
                     </Group>
                 </Card>
             )}
 
-            {/* SCREEN: FIGHT (REPLYING) */}
+            {/* SCREEN: FIGHT (P2 REPLIES) */}
             {mode === 'fight' && p1Data && (
                  <Card shadow="sm" padding="lg" withBorder>
                     <Stack>
@@ -507,7 +504,7 @@ function RapBattleApp() {
                             >
                                 {isRecording ? 'Stop' : 'Record'}
                             </Button>
-                            <Button color="red" onClick={submitReply} loading={isLoading}>
+                            <Button color="red" onClick={sendWsReply} loading={isLoading}>
                                 Finish Him!
                             </Button>
                         </Group>
@@ -515,34 +512,46 @@ function RapBattleApp() {
                  </Card>
             )}
 
-            {/* SCREEN: RESULT */}
-            {mode === 'result' && duelResult && (
-                 <Card shadow="sm" padding="xl" withBorder>
-                    <Stack align="center">
-                        <Title order={2}>WINNER: {duelResult.winner === 'p1_win' ? p1Data.name : username}</Title>
-                        
-                        <Group gap="xl" mt="md">
-                            <Stack align="center">
-                                <Text fw={700}>{p1Data.name}</Text>
-                                <Badge size="xl" color={duelResult.winner === 'p1_win' ? 'green' : 'red'}>
-                                    {duelResult.scores.p1_score}
-                                </Badge>
-                            </Stack>
-                            <Title order={3}>VS</Title>
-                            <Stack align="center">
-                                <Text fw={700}>{username}</Text>
-                                <Badge size="xl" color={duelResult.winner === 'p2_win' ? 'green' : 'red'}>
-                                    {duelResult.scores.p2_score}
-                                </Badge>
-                            </Stack>
-                        </Group>
-
-                        <Text c="dimmed" mt="md">"{duelResult.scores.comment}"</Text>
-                        <Button mt="lg" onClick={() => { setMode('menu'); setInput(''); }}>Back to Menu</Button>
-                    </Stack>
-                 </Card>
+            {/* SCREEN: JUDGING (SPINNER) */}
+            {mode === 'judging' && (
+                <Card h={300} withBorder>
+					<Center h="100%">
+						<Stack align="center">
+							<Loader size="xl" color="red" type="bars"/>
+							<Title order={3}>AI Judge is Deciding...</Title>
+							<Text c="dimmed">Analyzing rhymes, flow, and roasts</Text>
+						</Stack>
+					</Center>
+				</Card>
             )}
 
+			{/* SCREEN: RESULT (FINAL SCORE) */}
+			{ mode === 'result' && duelResult && (
+				<Card shadow="sm" padding="xl" withBorder>
+					<Stack align="center">
+						<Title order={2}>Winnder: {duelResult.winner}</Title>
+
+						<Group gap="xl" mt="md">
+							<Stack align="center">
+								<Text fw={700}>Player 1</Text>
+								<Badge size="xl" color={duelResult.winner === duelResult.scores.winner ? 'green' : 'gray'}>
+									{duelResult.scores.p1_score}
+								</Badge>
+							</Stack>
+							<Title order={3}>VS</Title>
+							<Stack align="center">
+								<Text fw={700}>Player 2</Text>
+								<Badge size="xl" color={duelResult.winner === duelResult.scores.winner ? 'gray' : 'green'}>
+									{duelResult.scores.p2_score}
+								</Badge>
+							</Stack>
+						</Group>
+
+						<Text c="dimmed" mt="md" ta="center">"{duelResult.scores.comment}"</Text>
+						<Button mt="lg" onClick={() => { setMode="menu"; setInput(''); }}>Back to Menu</Button>
+					</Stack>
+				</Card>
+			)}
           </Tabs.Panel>
 
           {/* === TAB 3: LEADERBOARD === */}
