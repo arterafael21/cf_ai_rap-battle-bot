@@ -258,38 +258,38 @@ function RapBattleApp() {
   };
 
   const loadChallenge = async () => {
-	if (!battleCode) return;
-	setIsLoading(true);
-	try {
-		const res = await fetch(`/challenge/${battleCode}`);
-		if (!res.ok) throw new Error('Battle not found');
-		const data = await res.json();
-		setP1Data(data.p1);
-		setMode('fight');
-	} catch (e) {
-		alert("Invalid code");
-	}
+    if (!battleCode) return;
+    setIsLoading(true);
+    try {
+      const res = await fetch(`/challenge/${battleCode}`);
+      if (!res.ok) throw new Error('Battle not found');
+      const data = await res.json();
+      setP1Data(data.p1);
+      setMode('fight');
+    } catch (e) {
+      alert("Invalid code");
+    }
   };
 
   const submitReply = async () => {
-      if (!input) return alert("You need to rap back!");
-      setIsLoading(true);
-      setStatus("Judging..."); // Added visual feedback
-      try {
-          const res = await fetch(`/challenge/${battleCode}/reply`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ username, verse: input })
-          });
-          const data = await res.json();
-          setDuelResult(data);
-          setMode('result');
-          setInput('');
-      } catch (e) {
-          alert("Error submitting reply");
-      }
-      setIsLoading(false);
-      setStatus('Ready');
+    if (!input) return alert("You need to rap back!");
+    setIsLoading(true);
+    setStatus("Judging"); 
+    try {
+        const res = await fetch(`/challenge/${battleCode}/reply`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, verse: input })
+        });
+        const data = await res.json();
+        setDuelResult(data);
+        setMode('result');
+        setInput('');
+    } catch (e) {
+        alert("Error submitting reply");
+    }
+    setIsLoading(false);
+    setStatus('Ready');
 	};
 
 	return (
@@ -298,7 +298,7 @@ function RapBattleApp() {
         {/* HEADER */}
         <Group justify="space-between" align="center">
           <div>
-            <Title order={2}>🎤 Rap Battle Bot</Title>
+            <Title order={2}>Rap Battle Bot</Title>
             <Text c="dimmed" size="sm">Identity: {username}</Text>
           </div>
           <Badge size="lg" color="blue" variant="light">

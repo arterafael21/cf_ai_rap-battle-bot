@@ -32,7 +32,7 @@
 	"migrations": [
 		{
 			"tag": "v1",
-			"new_classes": ["UsesrProfile"]
+			"new_classes": ["UserProfile"]
 		},
 		{
 			"tag": "v2",

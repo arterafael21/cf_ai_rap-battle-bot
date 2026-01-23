@@ -45,7 +45,7 @@ app.post('/battle', async (c) => {
     });
     const aiVerse = rapperRes.response;
 
-    // AI Judge
+    // AI Judge (FIX: Stricter Prompt to prevent JSON crashes)
     const judgeRes = await c.env.AI.run('@cf/meta/llama-3-8b-instruct', {
         messages: [
             { 
@@ -90,7 +90,7 @@ app.post('/battle', async (c) => {
 
     const result = scores.user.total > scores.ai.total ? "win" : "loss";
     
-    // Update DB AND Leaderboard
+    // FIX: Update DB AND Leaderboard
     if (username !== 'guest') {
         try {
             const id = c.env.USER_PROFILE.idFromName(username);
@@ -185,7 +185,7 @@ app.post('/challenge/create', async (c) => {
     return c.json({ battleId: hexId });
 })
 
-//  GET (Load Challenge Info)
+// FIX: CHANGED TO GET (Load Challenge Info)
 app.get('/challenge/:id', async (c) => {
     const hexId = c.req.param('id');
     try {
