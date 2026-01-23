@@ -44,6 +44,7 @@ async function loadHistory() {
 
     // re-render all saved battles
     history.forEach(battle => {
+        if (!battle.id) battle.id = 'legacy-' + index + '-' + Data.now();
         renderEntry(battle);
     });
 }
@@ -51,6 +52,8 @@ async function loadHistory() {
 function saveToHistory(data) {
     console.log("Saving to history storage:", data);
     const history = JSON.parse(localStorage.getItem('battle_history') || '[]');
+
+    data.id = 'battle-' + Date.now();
 
     // save whole object
     history.unshift(data); // add to top
@@ -191,7 +194,7 @@ async function handleAudioClick(id, text, opponent, btnId) {
 
     } catch (e) {
         console.error('Audio Error:', e);
-        btn.innerText = "❌ Error";
+        btn.innerText = "Error";
         btn.disabled = false;
     }
 }

@@ -159,11 +159,27 @@ app.post('/speak', async (c) => {
     try {
         const response = await c.env.AI.run('@cf/myshell-ai/melotts', {
             prompt: text,
+			lang: 'en',
         });
         
-        return new Response(response, {
-            headers: { 'Content-Type': 'audio/mpeg' }
-        });
+        const base64Audio = response.audio;
+
+		if (!base64Audio) {
+			throw new Error('No audio data returned from model');
+		}
+
+		const binaryString = atob(base64Audio);
+		const len = binaryString.length;
+		const bytes = new Uint8Array(len);
+		for (let i = 0; i < len; i++) {
+			bytes[i] = binaryString.charCodeAt(i);
+		}
+
+		// send as audio file
+		return new Response(bytes.buffer, {
+			headers: { 'Content-Type': 'audio/mpeg' }
+		});
+		
     } catch(e) {
         console.error('TTS Error:', e);
         return c.json({ error: 'TTS Failed' }, 500);
