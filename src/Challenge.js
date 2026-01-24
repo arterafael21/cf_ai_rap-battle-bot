@@ -1,30 +1,30 @@
+import { WORD_POOL, getRandomWord } from './constants';
+
 export class Challenge {
     constructor(state, env) {
         this.state = state;
-        this.sessions = []; // keep track of everyone in the room (P1 + P2)
+        this.sessions = []; 
         this.env = env;
         this.p1 = null;
         this.p2 = null;
-        this.status = 'OPEN' // 'OPEN' or 'FINISHED'
-        this.finalResult = null; // store result to show late-joiners
+        this.status = 'OPEN';
+        this.finalResult = null; 
+        this.mandatoryWord = null; 
     }
 
     async fetch (request) {
         if (request.headers.get("Upgrade") === "websocket") {
             const pair = new WebSocketPair();
             const [client, server] = Object.values(pair);
-
             this.handleSession(server);
-
             return new Response(null, { status: 101, webSocket: client });
         }
-
         return new Response("Expected WebSocket", { status: 400 });
     }
 
     handleSession(webSocket) {
         webSocket.accept();
-        this.sessions.push(webSocket); // add player
+        this.sessions.push(webSocket); 
 
         webSocket.addEventListener("message", async (msg) => {
             try {
@@ -32,10 +32,10 @@ export class Challenge {
 
                 // --- CREATE ---
                 if (event.type === 'CREATE') {
-                    this.status = 'OPEN'
+                    this.mandatoryWord = event.mandatoryWord || getRandomWord();
+                    
+                    this.status = 'OPEN';
                     this.finalResult = null;
-
-                    // save mode 
                     this.battleMode = event.battleMode || 'text';
 
                     this.p1 = { 
@@ -49,7 +49,6 @@ export class Challenge {
 
                 // --- JOIN ---
                 if (event.type === 'JOIN') {
-                    // Check if battle is over
                     if (this.status === 'FINISHED') {
                         webSocket.send(JSON.stringify({
                             type: 'RESULT',
@@ -65,7 +64,7 @@ export class Challenge {
                     }
                     this.p2 = { username: event.username, socket: webSocket };
 
-                    // notify p1
+                    // Notify P1
                     if (this.p1.socket.readyState === WebSocket.READY_STATE_OPEN) {
                         this.p1.socket.send(JSON.stringify({
                             type: 'OPPONENT_JOINED',
@@ -73,36 +72,37 @@ export class Challenge {
                         }));
                     }
 
-                    // start game for p2
+                    // Start game for P2
                     webSocket.send(JSON.stringify({
                         type: 'BATTLE_START',
                         opponent: this.p1.username,
                         verse: this.p1.verse,
                         battleMode: this.battleMode,
-                        audioData: this.p1.audioData
+                        audioData: this.p1.audioData,
+                        mandatoryWord: this.mandatoryWord // Send the shared word
                     }));
                 }
 
                 // --- REPLY ---
                 if (event.type === 'REPLY') {
                     this.p2.verse = event.verse;
-                    this.broadcast({ type: 'JUDGING' });
-                    const result = await this.runJudge(this.p1, this.p2);
+                    this.p2.audioData = event.audioData || null;
 
-                    // save state
+                    this.broadcast({ type: 'JUDGING' });
+                    
+                    const result = await this.runJudge(this.p1, this.p2, this.mandatoryWord);
+
                     this.status = 'FINISHED';
                     this.finalResult = result;
 
                     result.p1_verse = this.p1.verse;
                     result.p2_verse = this.p2.verse;
-                    result.p2_audio = this.p2.audioData
+                    result.p2_audio = this.p2.audioData;
 
                     const savedID = await this.saveBattleToDB(result);
                     result.battle_id = savedID;
 
                     this.broadcast({ type: 'RESULT', result});
-
-                    // update PVP leaderboard
                     await this.updateLeaderboard(result.winner);
                 }
             } catch (err) {
@@ -121,11 +121,13 @@ export class Challenge {
         });
     }
 
-    async runJudge(p1, p2) {
+    async runJudge(p1, p2, word) {
         try {
-            const prompt = `Judge this rap battle. Output JSON only: { "p1_score": 5, "p2_score": 5, "comment": "..." }
-            P1 (${p1.username}): "${p1.verse}"
-            P2 (${p2.username}): "${p2.verse}"`;
+            const prompt = `Judge this rap battle. 
+                MANDATORY WORD: "${word || 'NONE'}". If a word is specified, give +10 points if used.
+                Output JSON: { "p1_score": 5, "p2_score": 5, "comment": "..." }
+                P1: "${p1.verse}"
+                P2: "${p2.verse}"`;
 
             const res = await this.env.AI.run('@cf/meta/llama-3-8b-instruct', {
                 messages: [{ role: 'user', content: prompt }]
@@ -148,7 +150,6 @@ export class Challenge {
         if (!winnerUsername || winnerUsername === "Draw") return;
 
         try {
-            // update global PVP leaderboard
             const id = this.env.LEADERBOARD.idFromName('GLOBAL_PVP');
             const stub = this.env.LEADERBOARD.get(id);
             await stub.fetch('http://do/submit', {
@@ -156,17 +157,13 @@ export class Challenge {
                 body: JSON.stringify({ username: winnerUsername })
             });
 
-            // update User's Personal profile 
             const userId = this.env.USER_PROFILE.idFromName(winnerUsername);
             const userStub = this.env.USER_PROFILE.get(userId);
 
             await userStub.fetch('http://do/update', {
                 method: 'POST',
                 headers: { 'CONTENT-TYPE': 'application/json' },
-                body: JSON.stringify({
-                    result: 'win',
-                    type: 'pvp'
-                })
+                body: JSON.stringify({ result: 'win', type: 'pvp' })
             });
         } catch (e) {
             console.error("Leaderboard update failed", e);
@@ -189,7 +186,7 @@ export class Challenge {
 
             await this.env.DB.prepare(query)
                 .bind(
-                    crypto.randomUUID(),
+                    battleID,
                     this.p1.username,
                     this.p2.username,
                     this.p1.verse,
@@ -200,7 +197,7 @@ export class Challenge {
                 .run();
             return battleID;
         } catch (e) {
-            console.error('Failed to save battle to D1');
+            console.error('Failed to save battle to D1', e);
             return null;
         }
     }
