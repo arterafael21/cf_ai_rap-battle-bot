@@ -1,18 +1,18 @@
 import React from 'react';
 import {
     Title, Card, Text, Textarea, Button, Group, Badge, Stack, Grid, ActionIcon, 
-    Divider, FileButton, TextInput, Switch, Container
+    Divider, FileButton, TextInput, Switch, Container, Menu, Avatar
 } from '@mantine/core';
 import { 
-    IconMicrophone, IconMicrophoneOff, IconSend, IconPlayerPlay, IconBulb, IconRefresh, IconUser, IconCamera, IconCheck, IconEdit, IconTrophy, IconChartBar, IconSwords, IconId
+    IconMicrophone, IconMicrophoneOff, IconSend, IconPlayerPlay, IconBulb, IconRefresh, IconUser, IconCamera, IconCheck, IconEdit, IconTrophy, IconChartBar, IconSwords, IconId, IconLogout
 } from '@tabler/icons-react';
 import { SignedIn, SignedOut, SignInButton, UserButton } from "@clerk/clerk-react";
 import { OPPONENTS } from '../../src/constants';
 
 // --- SUB-COMPONENTS ---
 
-export const AppHeader = ({ user, isLoaded, identity, stats }) => {
-    const avatarUrl = user ? `/avatar/${user.id}?t=${Date.now()}` : null;
+export const AppHeader = ({ user, isLoaded, identity, stats, avatarTs, onLogout }) => {
+    const avatarUrl = user ? `/avatar/${user.id}?t=${avatarTs}` : null;
 
     return (
         <Stack align="center" gap="xl" mb={30} mt="lg">
@@ -24,7 +24,7 @@ export const AppHeader = ({ user, isLoaded, identity, stats }) => {
                     {!isLoaded ? "Loading..." : (identity?.mc_name ? identity.mc_name : `MC ${user?.firstName || 'Guest'}`)}
                 </Text>
             </Stack>
-            <Group gap="md" p="xs" bg="gray.1" style={{ borderRadius: '50px', border: '1px solid #e9ecef', paddingRight: 6 }}>
+            <Group gap="md" p={6} bg="gray.0" style={{ borderRadius: '50px', border: '1px solid #e9ecef', paddingRight: 12 }}>
                 {!isLoaded ? null : (
                     <>
                         <SignedOut>
@@ -33,25 +33,41 @@ export const AppHeader = ({ user, isLoaded, identity, stats }) => {
                             </SignInButton>
                         </SignedOut>
                         <SignedIn>
-                            {/* CUSTOM AVATAR DISPLAY */}
-                            <div style={{ width: 40, height: 40, borderRadius: '50%', overflow: 'hidden', border: '2px solid #228be6' }}>
-                                <img 
-                                    src={avatarUrl}
-                                    onError={(e) => { e.target.onerror = null; e.target.src = user?.imageUrl; }}
-                                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                                    alt="User"
-                                />
-                            </div>
+                            {/* DROPDOWN MENU FOR AVATAR */}
+                            <Menu shadow="md" width={200} position="bottom-end">
+                                <Menu.Target>
+                                    <Avatar 
+                                        src={avatarUrl} 
+                                        alt={user?.firstName} 
+                                        size={40} 
+                                        radius="xl"
+                                        style={{ cursor: 'pointer', border: '2px solid #228be6' }}
+                                    >
+                                        {user?.firstName?.[0]}
+                                    </Avatar>
+                                </Menu.Target>
 
-                            {/* RANK (TEXT) INSTEAD OF NUMBER */}
+                                <Menu.Dropdown>
+                                    <Menu.Label>My Account</Menu.Label>
+                                    <Menu.Item leftSection={<IconUser size={14} />}>
+                                        Signed in as {identity?.mc_name || user.firstName}
+                                    </Menu.Item>
+                                    <Divider />
+                                    <Menu.Item 
+                                        color="red" 
+                                        leftSection={<IconLogout size={14} />}
+                                        onClick={onLogout}
+                                    >
+                                        Log Out
+                                    </Menu.Item>
+                                </Menu.Dropdown>
+                            </Menu>
+
                             <Badge size="lg" variant="dot" color="blue" radius="sm" style={{ background: 'transparent', border: 'none' }}>
                                 Rank: {stats.rank || "Novice"}
                             </Badge>
-                            
                             <Divider orientation="vertical" />
-                            
-                            {/* SCORE SPLIT DISPLAY (Optional, keeps it clean) */}
-                             <Text size="xs" fw={700} c="dimmed">Wins: {stats.wins || 0}</Text>
+                            <Text size="xs" fw={700} c="dimmed">Wins: {stats.wins || 0}</Text>
                         </SignedIn>
                     </>
                 )}
@@ -264,12 +280,11 @@ export const OnboardingFlow = ({ name, setName, setFile, onSubmit, loading }) =>
     );
 };
 
-export const ProfileView = ({ user, stats, identity, onUpdateProfile, uploading }) => {
+export const ProfileView = ({ user, stats, identity, onUpdateProfile, uploading, avatarTs }) => {
     const [isEditing, setIsEditing] = React.useState(false);
     const [newName, setNewName] = React.useState(identity?.mc_name || '');
     const [newFile, setNewFile] = React.useState(null);
     const [preview, setPreview] = React.useState(null);
-    const [imageTs, setImageTs] = React.useState(Date.now());
 
     // Force image refresh cache buster
     const avatarUrl = user ? `/avatar/${user.id}?t=${Date.now()}` : null;
@@ -289,12 +304,8 @@ export const ProfileView = ({ user, stats, identity, onUpdateProfile, uploading 
         try {
             await onUpdateProfile(newName, newFile);
             setIsEditing(false);
-            if (newFile) {
-                setImageTs(Date.now());
-            } else {
-                setPreview(null);
-            }
             setNewFile(null);
+            setPreview(null);
         } catch(e) {console.error("Error saving image:", e)}
     };
 
@@ -302,7 +313,6 @@ export const ProfileView = ({ user, stats, identity, onUpdateProfile, uploading 
         if (isEditing) {
             setPreview(null);
             setNewFile(null);
-            setNewName(identity?.mc_name || '');
         }
         setIsEditing(!isEditing);
     }

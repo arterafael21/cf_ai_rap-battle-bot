@@ -6,7 +6,7 @@ import {
     IconMicrophone, IconMicrophoneOff, IconTrophy, IconSwords, IconUsers, IconSearch, IconArrowLeft, IconShare, IconKeyboard, IconMusic, IconUserCircle, IconEdit
 } from '@tabler/icons-react';
 import '@mantine/core/styles.css';
-import { ClerkProvider, SignedIn, SignedOut, useUser, useAuth } from "@clerk/clerk-react";
+import { ClerkProvider, SignedIn, SignedOut, useUser, useAuth, useClerk } from "@clerk/clerk-react";
 
 // IMPORTS
 import { getRandomWord } from '../../src/constants';
@@ -19,6 +19,7 @@ if (!CLERK_KEY) throw new Error("Missing Publishable Key");
 function RapBattleApp() {
     const { user, isLoaded } = useUser();
     const { getToken } = useAuth();
+	const { signOut } = useClerk();
 
     // STATE
     const [identity, setIdentity] = useState(null);
@@ -26,6 +27,7 @@ function RapBattleApp() {
     const [uploading, setUploading] = useState(false);
     const [onboardingName, setOnboardingName] = useState(''); 
     const [onboardingFile, setOnboardingFile] = useState(null);
+	const [avatarTs, setAvatarTs] = useState(Date.now());
     
     const [stats, setStats] = useState({ wins: 0, losses: 0, score: 0, rank: 'Novice' });
     const [leaderboard, setLeaderboard] = useState([]);
@@ -61,7 +63,7 @@ function RapBattleApp() {
     const audioCache = useRef({});
     const mediaRecorder = useRef(null);
     const audioChunks = useRef([]);
-
+	
     // INITIALIZATION
     useEffect(() => {
         if (user) {
@@ -175,6 +177,8 @@ function RapBattleApp() {
 				if (data.description) {
 					setIdentity(prev => ({ ...prev, roast_context: data.description }));
 				}
+
+				setAvatarTs(Date.now())
 			}
 
 			// 3. Background refresh (just in case)
@@ -391,7 +395,12 @@ function RapBattleApp() {
         socket.onopen = async () => {
             console.log("WS Connected");
 			const myName = identity?.mc_name || user?.firstName || 'Guest';
-			socket.send(JSON.stringify({ type: 'INIT', username: myName, role: role }));
+			socket.send(JSON.stringify({ 
+				type: 'INIT',
+				username: myName,
+				userId: user.id,
+				myName, role: role 
+			}));
 
             if (role == "CREATE") {
 				if (pendingVerse) {
@@ -422,7 +431,7 @@ function RapBattleApp() {
 
 			if (msg.type === 'OPPONENT_JOINED') {
 				console.log('Opponent joined:', msg.username);
-				setP1Data({ name: msg.username });
+				setP1Data({ name: msg.username, id: msg.userId });
 				setMode('battle_wait');
 			}
 
@@ -451,7 +460,7 @@ function RapBattleApp() {
 				console.log("Opponent joined");
 			}
 			if (msg.type === "BATTLE_START") {
-                setP1Data({ name: msg.opponent, verse: msg.verse });
+                setP1Data({ name: msg.opponent, verse: msg.verse, id: msg.opponentId });
                 if (msg.mandatoryWord) { setTargetWord(msg.mandatoryWord); setWordMode(true); }
 				setStatus('Ready');
 				setInput('');
@@ -539,7 +548,15 @@ function RapBattleApp() {
 		<Container size="md" py="xl"> 
 			<Stack gap="lg" align="center">
 				
-				<AppHeader user={user} isLoaded={isLoaded} identity={identity} stats={stats} />
+				<AppHeader 
+                    user={user} 
+                    isLoaded={isLoaded} 
+                    identity={identity} 
+                    stats={stats} 
+                    avatarTs={avatarTs} 
+                    onLogout={() => signOut()}
+                    onEditProfile={() => { /* logic to switch tab */ }}
+                />
 
 				<SignedOut>
 					{mode === 'result' ? null : (
@@ -682,7 +699,7 @@ function RapBattleApp() {
 											<Group justify="space-between">
 												<ActionIcon variant="subtle" color="gray" onClick={() => setMode('menu')}><IconArrowLeft /></ActionIcon>
 												<Title order={4}>Battle Setup</Title>
-												<div style={{ width: 28 }} /> {/* Spacer for balance */}
+												<div style={{ width: 28 }} /> 
 											</Group>
 
 											<Card bg="gray.0" radius="md" p="md">
@@ -742,7 +759,19 @@ function RapBattleApp() {
 							{mode === 'fight' && p1Data && (
 								<Card shadow="sm" padding="lg" withBorder>
 									<Stack>
-										<Group justify="space-between"><Title order={4}>Opponent: {p1Data.name}</Title><Badge color={battleMode === 'audio' ? 'pink' : 'gray'}>{battleMode === 'audio' ? 'Audio Battle' : 'Text Battle'}</Badge></Group>
+										<Group justify="space-between">
+											<Group>
+												<Avatar 
+													src={p1Data?.id ? `/avatar/${p1Data.id}?t=${Date.now()}` : null} 
+													radius="xl" size="md" color="blue"
+												>
+													{p1Data?.name?.[0]}
+												</Avatar>
+												<Title order={4}>{p1Data.name}</Title>
+											</Group>
+											<Title order={4}>Opponent: {p1Data.name}</Title>
+											<Badge color={battleMode === 'audio' ? 'pink' : 'gray'}>{battleMode === 'audio' ? 'Audio Battle' : 'Text Battle'}</Badge>
+										</Group>
 										
 										{wordMode && <WordDisplay word={targetWord} />}
 										
@@ -791,7 +820,15 @@ function RapBattleApp() {
 								<Card shadow="sm" padding="lg" withBorder>
 									<Stack>
 										<Group justify="space-between">
-											<Title order={4}>Opponent: {p1Data?.name || "Unknown"}</Title>
+											<Group>
+												<Avatar 
+													src={p1Data?.id ? `/avatar/${p1Data.id}?t=${Date.now()}` : null} 
+													radius="xl" size="md" color="blue"
+												>
+													{p1Data?.name?.[0]}
+												</Avatar>
+												<Title order={4}>{p1Data?.name || "Unknown"}</Title>
+											</Group>
 											<Badge color="yellow" variant="light">Opponent's Turn</Badge>
 										</Group>
 
@@ -808,7 +845,6 @@ function RapBattleApp() {
 											<IconUserCircle size={32} color="gray" />
 											{isOpponentTyping ? (
 												<Card bg="gray.1" padding="xs" radius="xl">
-													{/* Simple CSS Pulse Animation for dots */}
 													<Text size="sm" fw={700} c="dimmed">
 														Typing<span className="typing-dots">...</span>
 													</Text>
@@ -839,6 +875,7 @@ function RapBattleApp() {
 									identity={identity}
 									onUpdateProfile={updateProfileLogic}
 									uploading={uploading}
+									avatarTs={avatarTs}
 								/>
 								
 								<Container size="sm" style={{ width: '100%' }}>
