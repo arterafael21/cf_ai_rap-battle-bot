@@ -104,23 +104,41 @@ function RapBattleApp() {
         setUploading(true);
         const token = await getToken();
 
-        if (onboardingFile) {
-            const formData = new FormData();
-            formData.append('image', onboardingFile);
-            await fetch('/onboarding/upload', {
-                method: 'POST', headers: { 'Authorization': `Bearer ${token}`}, body: formData
-            });
-        }
-        await fetch('/onboarding/update', {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ mcName: onboardingName }) 
-        });
-        setShowOnboarding(false);
-        setUploading(false);
-        fetchStats(user.id);
+		try {
+			const res = await fetch('/onboarding/update', {
+				method: 'POST',
+				headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, 
+				body: JSON.stringify({ mcName: onboardingName })
+			});
+			
+			if (!res.ok) {
+				const data = await res.json();
+				throw new Error(data.error || 'Failed to update name');
+			}
+
+			if (onboardingFile) {
+				const formData = new FormData();
+				formData.append('image', onboardingFile);
+				await fetch('/onboarding/upload', {
+					method: 'POST', headers: { 'Authorization': `Bearer ${token}`}, body: formData
+            	});
+        	}
+
+			await fetch('/onboarding/update', {
+				method: 'POST',
+				headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+				body: JSON.stringify({ mcName: onboardingName }) 
+			});
+
+			setShowOnboarding(false);
+			fetchStats(user.id);
+		} catch (e) {
+			alert(e.message);
+		} finally {
+			setUploading(false);
+		}
     }
-	
+
 	const updateProfileLogic = async (newName, newFile) => {
 		setUploading(true);
 		const token = await getToken();

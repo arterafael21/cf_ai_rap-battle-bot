@@ -235,7 +235,19 @@ app.post('/onboarding/update', async (c) => {
 
     const { mcName } = await c.req.json();
 
+	if (!mcName || mcName.length < 3) {
+		return c.json({ error: "Name must be at leasat 3 chars" }, 400);
+	}
+
     try {
+		const taken = await c.env.DB.prepare('SELECT id FROM users WHERE mc_name=? AND id !=?')
+			.bind(mcName, userId)
+			.first();
+		
+		if (taken) {
+			return c.json({ error: "Username already taken" }, 409);
+		}
+		
         const existing = await c.env.DB.prepare('SELECT * FROM users WHERE id=?').bind(userId).first();
         if (existing) {
             await c.env.DB.prepare('UPDATE users SET mc_name=? WHERE id=?').bind(mcName, userId).run();
