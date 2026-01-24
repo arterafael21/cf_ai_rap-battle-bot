@@ -3,14 +3,14 @@ import {
     MantineProvider, Container, Title, Card, Text, Button, Group, Badge, Stack, Grid, Loader, Tabs, Input, CopyButton, Divider, Center, SegmentedControl, Switch, rem, Modal, FileButton, TextInput, ActionIcon, Table
 } from '@mantine/core';
 import { 
-    IconMicrophone, IconMicrophoneOff, IconTrophy, IconSwords, IconUsers, IconSearch, IconArrowLeft, IconShare, IconKeyboard, IconMusic
+    IconMicrophone, IconMicrophoneOff, IconTrophy, IconSwords, IconUsers, IconSearch, IconArrowLeft, IconShare, IconKeyboard, IconMusic, IconUserCircle, IconEdit
 } from '@tabler/icons-react';
 import '@mantine/core/styles.css';
 import { ClerkProvider, SignedIn, SignedOut, useUser, useAuth } from "@clerk/clerk-react";
 
 // IMPORTS
 import { getRandomWord } from '../../src/constants';
-import { AppHeader, WordDisplay, OpponentSelector, BattleInputArea, HistoryItem, OnboardingFlow } from './components';
+import { AppHeader, WordDisplay, OpponentSelector, BattleInputArea, HistoryItem, OnboardingFlow, ProfileView } from './components';
 
 const CLERK_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 if (!CLERK_KEY) throw new Error("Missing Publishable Key");
@@ -116,6 +116,40 @@ function RapBattleApp() {
         setUploading(false);
         fetchStats(user.id);
     }
+
+	const updateProfileLogic = async (newName, newFile) => {
+		setUploading(true);
+		const token = await getToken();
+
+		try {
+			// 1. Upload Image
+			if (newFile) {
+				const formData = new formData();
+				formData.append('image', newFile);
+				await fetch('/onboarding/upload', {
+					method: 'POST',
+					headers: { 'Authorization': `Bearer ${token}`},
+					body: formData
+				});
+			}
+
+			if (newName) {
+				await fetch('/onboarding/update', {
+					method: 'POST',
+					headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+					body: JSON.stringify({ mcName: newName })
+				});
+			}
+
+			// 3. Refresh Data
+			await fetchStats(user.id);
+			alert("Profile Updated!");
+		} catch (e) {
+			alert("Update failed: " + e.message);
+		} finally {
+			setUploading(false);
+		}
+	}
 
     const fetchLeaderboard = async (type='single') => {
         try {
@@ -424,6 +458,7 @@ function RapBattleApp() {
 						<Tabs.Tab value="battle" leftSection={<IconSwords size={18} />}>Single Player</Tabs.Tab>
 						<Tabs.Tab value="multiplayer" leftSection={<IconUsers size={18} />}>Multiplayer</Tabs.Tab>
 						<Tabs.Tab value="leaderboard" leftSection={<IconTrophy size={18} />}>Leaderboard</Tabs.Tab>
+						<Tabs.Tab value="profile" leftSection={<IconUserCircle size={18} />}>Profile</Tabs.Tab>
 					</Tabs.List>
 
 					<Tabs.Panel value="battle" pt="lg">
@@ -624,6 +659,16 @@ function RapBattleApp() {
 						<Table striped><Table.Thead><Table.Tr><Table.Th>Rank</Table.Th><Table.Th>Rapper</Table.Th><Table.Th>Wins</Table.Th></Table.Tr></Table.Thead>
 						<Table.Tbody>{leaderboard.map((player, index) => (<Table.Tr key={player.username}><Table.Td>#{index + 1}</Table.Td><Table.Td fw={700}>{player.username}</Table.Td><Table.Td>{player.score}</Table.Td></Table.Tr>))}</Table.Tbody></Table>
 						</Card>
+					</Tabs.Panel>
+
+					<Tabs.Panel value="profile" pt="md">
+						<ProfileView
+							user={user}
+							stats={stats}
+							identity={identity}
+							onUpdateProfile={updateProfileLogic}
+							uploading={uploading}
+						/>
 					</Tabs.Panel>
 					</Tabs>
 				</SignedIn>

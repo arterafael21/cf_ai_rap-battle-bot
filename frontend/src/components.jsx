@@ -4,7 +4,7 @@ import {
     Divider, FileButton, TextInput, Switch, Container
 } from '@mantine/core';
 import { 
-    IconMicrophone, IconMicrophoneOff, IconSend, IconPlayerPlay, IconBulb, IconRefresh, IconUser, IconCamera, IconCheck
+    IconMicrophone, IconMicrophoneOff, IconSend, IconPlayerPlay, IconBulb, IconRefresh, IconUser, IconCamera, IconCheck, IconEdit, IconTrophy, IconChartBar, IconSwords, IconId
 } from '@tabler/icons-react';
 import { SignedIn, SignedOut, SignInButton, UserButton } from "@clerk/clerk-react";
 import { OPPONENTS } from '../../src/constants';
@@ -243,6 +243,122 @@ export const OnboardingFlow = ({ name, setName, setFile, onSubmit, loading }) =>
                     )}
                 </Stack>
             </Card>
+        </Container>
+    );
+};
+
+export const ProfileView = ({ user, stats, identity, onUpdateProfile, uploading }) => {
+    const [isEditing, setIsEditing] = React.useState(false);
+    const [newName, setNewName] = React.useState(identity?.mc_name || '');
+    const [newFile, setNewFile] = React.useState(null);
+
+    // Calculate Win Rate
+    const totalBattles = (stats.wins || 0) + (stats.losses || 0);
+    const winRate = totalBattles > 0 ? Math.round((stats.wins / totalBattles) * 100) : 0;
+
+    const handleSave = () => {
+        onUpdateProfile(newName, newFile);
+        setIsEditing(false);
+        setNewFile(null);
+    };
+
+    return (
+        <Container size="sm">
+            <Stack gap="lg">
+                {/* HEADER CARD */}
+                <Card padding="xl" radius="lg" withBorder shadow="sm">
+                    <Group justify="space-between" align="start">
+                        <Group>
+                            {/* User Avatar */}
+                            <div style={{ position: 'relative' }}>
+                                <img 
+                                    src={user.imageUrl} 
+                                    alt="Profile" 
+                                    style={{ width: 80, height: 80, borderRadius: '50%', border: '3px solid #228be6' }} 
+                                />
+                                <Badge 
+                                    circle 
+                                    size="lg" 
+                                    color="blue" 
+                                    style={{ position: 'absolute', bottom: -5, right: -5 }}
+                                >
+                                    {stats.rank?.charAt(0) || 'N'}
+                                </Badge>
+                            </div>
+                            
+                            <Stack gap={0}>
+                                <Title order={2}>{identity?.mc_name || "Unknown MC"}</Title>
+                                <Text c="dimmed">Rank: {stats.rank || "Novice"}</Text>
+                                <Text size="xs" c="dimmed">Joined: {new Date(user.createdAt).toLocaleDateString()}</Text>
+                            </Stack>
+                        </Group>
+                        <Button 
+                            variant="light" 
+                            leftSection={<IconEdit size={16} />} 
+                            onClick={() => setIsEditing(!isEditing)}
+                        >
+                            {isEditing ? "Cancel" : "Edit Profile"}
+                        </Button>
+                    </Group>
+
+                    {/* EDIT MODE AREA */}
+                    {isEditing && (
+                        <Card bg="gray.0" mt="md" radius="md" withBorder>
+                            <Stack>
+                                <TextInput 
+                                    label="Update MC Name" 
+                                    value={newName} 
+                                    onChange={(e) => setNewName(e.currentTarget.value)} 
+                                />
+                                <Group align="end">
+                                    <FileButton onChange={setNewFile} accept="image/png,image/jpeg">
+                                        {(props) => <Button {...props} variant="default" leftSection={<IconCamera size={16}/>}>Change Photo</Button>}
+                                    </FileButton>
+                                    {newFile && <Text size="sm">{newFile.name}</Text>}
+                                </Group>
+                                <Text size="xs" c="orange">Note: Uploading a new photo will re-run the AI analysis!</Text>
+                                <Button loading={uploading} onClick={handleSave}>Save Changes</Button>
+                            </Stack>
+                        </Card>
+                    )}
+                </Card>
+
+                {/* STATS GRID */}
+                <Grid>
+                    <Grid.Col span={4}>
+                        <Card withBorder radius="md" padding="lg" ta="center">
+                            <Text size="xs" tt="uppercase" fw={700} c="dimmed">Score</Text>
+                            <Title order={2}>{stats.score || 0}</Title>
+                            <IconTrophy size={24} color="gold" style={{ marginTop: 8 }} />
+                        </Card>
+                    </Grid.Col>
+                    <Grid.Col span={4}>
+                        <Card withBorder radius="md" padding="lg" ta="center">
+                            <Text size="xs" tt="uppercase" fw={700} c="dimmed">Win Rate</Text>
+                            <Title order={2}>{winRate}%</Title>
+                            <IconChartBar size={24} color="blue" style={{ marginTop: 8 }} />
+                        </Card>
+                    </Grid.Col>
+                    <Grid.Col span={4}>
+                        <Card withBorder radius="md" padding="lg" ta="center">
+                            <Text size="xs" tt="uppercase" fw={700} c="dimmed">Battles</Text>
+                            <Title order={2}>{totalBattles}</Title>
+                            <IconSwords size={24} color="red" style={{ marginTop: 8 }} />
+                        </Card>
+                    </Grid.Col>
+                </Grid>
+
+                {/* AI ANALYSIS CARD */}
+                <Card withBorder radius="lg" padding="lg">
+                    <Group mb="sm">
+                        <IconId color="gray" />
+                        <Title order={4}>AI Persona Analysis</Title>
+                    </Group>
+                    <Text size="sm" c="dimmed" fs="italic">
+                        "{identity?.roast_context || "No analysis available. Upload a photo to generate one."}"
+                    </Text>
+                </Card>
+            </Stack>
         </Container>
     );
 };
