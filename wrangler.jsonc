@@ -7,7 +7,9 @@
 	"name": "rap-battle-bot",
 	"main": "src/index.jsx",
 	"compatibility_date": "2025-09-27",
-	"compatibility_flags": [ "nodejs_compat" ],
+	"compatibility_flags": [
+		"nodejs_compat"
+	],
 	"observability": {
 		"enabled": true
 	},
@@ -33,15 +35,28 @@
 	"migrations": [
 		{
 			"tag": "v1",
-			"new_classes": ["UserProfile"]
+			"new_classes": [
+				"UserProfile"
+			]
 		},
 		{
 			"tag": "v2",
-			"new_classes": ["Leaderboard"]
+			"new_classes": [
+				"Leaderboard"
+			]
 		},
 		{
 			"tag": "v3",
-			"new_classes": ["Challenge"]
+			"new_classes": [
+				"Challenge"
+			]
+		}
+	],
+	"d1_databases": [
+		{
+			"binding": "rap_battle_db",
+			"database_name": "rap-battle-db",
+			"database_id": "52ff179e-73e9-4570-ad25-4f98a0cc6502"
 		}
 	]
 	/**

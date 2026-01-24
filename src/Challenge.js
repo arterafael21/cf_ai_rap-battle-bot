@@ -168,4 +168,32 @@ export class Challenge {
             console.error("Leaderboard update failed", e);
         }
     }
+
+    async saveBattleToDB(result) {
+        if (!this.env.DB) {
+            console.error("D1 Database binding 'DB' not found");
+            return;
+        }
+
+        try {
+            const query = `
+                INSERT INTO battles (id, p1_name, p2_name, p1_verse, p2_verse, winner, timestamp)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            `;
+
+            await this.env.DB.prepare(query)
+                .bind(
+                    crypto.randomUUID(),
+                    this.p1.username,
+                    this.p2.username,
+                    this.p1.verse,
+                    result.winner,
+                    Date.now()
+                )
+                .run();
+            console.log('Battle saved to D1');
+        } catch (e) {
+            console.error('Failed to save battle to D1');
+        }
+    }
 }
