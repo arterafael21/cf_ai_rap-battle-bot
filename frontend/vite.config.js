@@ -6,6 +6,11 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
+      '/onboarding': {
+        target: 'http://127.0.0.1:8787',
+        changeOrigin: true,
+        secure: false,
+      },
       '/leaderboard': 'http://localhost:8787',
       '/battle': 'http://localhost:8787',
       '/profile': 'http://localhost:8787',
