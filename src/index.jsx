@@ -53,7 +53,9 @@ app.post('/battle', async (c) => {
             const userRow = await c.env.DB.prepare('SELECT roast_context FROM users WHERE id = ?').bind(userId).first();
             if (userRow && userRow.roast_context) {
                 visualContext = `\nVISUAL CONTEXT FOR ROASTING: The user looks like this: "${userRow.roast_context}". USE THIS TO ROAST THEM.`;
-            }
+            } else {
+				visualContext = `\nVISUAL CONTEXT: The user has NO profile photo. OPTIONAL: Mock them for being anonymous or scared to show their face.`;
+			}
         } catch(e) { console.log("DB Roast Fetch Error", e); }
     }
 
@@ -270,7 +272,7 @@ app.post('/onboarding/upload', async (c) => {
         roastContext = aiRes.response || 'A mystery rapper';
     } catch (e) {
         console.error("Vision AI Failed", e);
-        roastContext = 'A rapper with an indescribable aura';
+        roastContext = 'No photo provided';
     }
 
     try {
@@ -293,6 +295,24 @@ app.get('/ws/queue', async (c) => {
 	const stub = c.env.MATCHMAKER.get(id);
 	return stub.fetch(c.req.raw);
 });
+
+app.get('/avatar/:userId', async (c) => {
+	const userId = c.req.param('userId');
+	if (!c.env.AVATAR_BUCKET) return c.text('No Bucket', 500);
+
+	// try to get file
+	const object = await c.env.AVATAR_BUCKET.get(userId + '.png');
+	if (!object) {
+		return c.text('No Avatar', 404);
+	}
+
+	const headers = new Headers();
+	object.writeHttpMetadata(headers);
+	headers.set('etag', object.httpEtag);
+	headers.set('Cache-Control', 'private, max-age=0, no-cache');
+
+	return new Response(object.body, { headers });
+})
 
 export default app;
 export { UserProfile, Leaderboard, Challenge, Matchmaker };

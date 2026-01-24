@@ -251,37 +251,50 @@ export const ProfileView = ({ user, stats, identity, onUpdateProfile, uploading 
     const [isEditing, setIsEditing] = React.useState(false);
     const [newName, setNewName] = React.useState(identity?.mc_name || '');
     const [newFile, setNewFile] = React.useState(null);
+    const [preview, setPreview] = React.useState(null);
+
+    // Force image refresh cache buster
+    const avatarUrl = `/avatar/${user.id}?t=${Date.now()}`;
 
     // Calculate Win Rate
     const totalBattles = (stats.wins || 0) + (stats.losses || 0);
     const winRate = totalBattles > 0 ? Math.round((stats.wins / totalBattles) * 100) : 0;
 
-    const handleSave = () => {
-        onUpdateProfile(newName, newFile);
-        setIsEditing(false);
-        setNewFile(null);
+    const handleFileChange = (file) => {
+        setNewFile(file);
+        if (file) {
+            setPreview(URL.createObjectURL(file));
+        }
+    };
+
+    const handleSave = async () => {
+        try {
+            await onUpdateProfile(newName, newFile);
+            setIsEditing(false);
+            setNewFile(null);
+            setPreview(null);
+        } catch(e) {}
     };
 
     return (
         <Container size="sm">
             <Stack gap="lg">
-                {/* HEADER CARD */}
+                
+                {/* 1. HEADER CARD (Avatar & Name) */}
                 <Card padding="xl" radius="lg" withBorder shadow="sm">
                     <Group justify="space-between" align="start">
                         <Group>
-                            {/* User Avatar */}
                             <div style={{ position: 'relative' }}>
                                 <img 
-                                    src={user.imageUrl} 
+                                    src={preview || avatarUrl} 
+                                    onError={(e) => { e.target.onerror = null; e.target.src = user.imageUrl; }} 
                                     alt="Profile" 
-                                    style={{ width: 80, height: 80, borderRadius: '50%', border: '3px solid #228be6' }} 
+                                    style={{ 
+                                        width: 100, height: 100, borderRadius: '50%', 
+                                        border: '4px solid #228be6', objectFit: 'cover' 
+                                    }} 
                                 />
-                                <Badge 
-                                    circle 
-                                    size="lg" 
-                                    color="blue" 
-                                    style={{ position: 'absolute', bottom: 0, right: 0 }}
-                                >
+                                <Badge circle size="lg" color="blue" style={{ position: 'absolute', bottom: 0, right: 0 }}>
                                     {stats.rank?.charAt(0) || 'N'}
                                 </Badge>
                             </div>
@@ -292,38 +305,33 @@ export const ProfileView = ({ user, stats, identity, onUpdateProfile, uploading 
                                 <Text size="xs" c="dimmed">Joined: {new Date(user.createdAt).toLocaleDateString()}</Text>
                             </Stack>
                         </Group>
-                        <Button 
-                            variant="light" 
-                            leftSection={<IconEdit size={16} />} 
-                            onClick={() => setIsEditing(!isEditing)}
-                        >
+                        <Button variant="light" leftSection={<IconEdit size={16} />} onClick={() => setIsEditing(!isEditing)}>
                             {isEditing ? "Cancel" : "Edit Profile"}
                         </Button>
                     </Group>
 
-                    {/* EDIT MODE AREA */}
+                    {/* EDIT AREA (Shows up inside Header when editing) */}
                     {isEditing && (
                         <Card bg="gray.0" mt="md" radius="md" withBorder>
                             <Stack>
-                                <TextInput 
-                                    label="Update MC Name" 
-                                    value={newName} 
-                                    onChange={(e) => setNewName(e.currentTarget.value)} 
-                                />
+                                <TextInput label="Update MC Name" value={newName} onChange={(e) => setNewName(e.currentTarget.value)} />
                                 <Group align="end">
-                                    <FileButton onChange={setNewFile} accept="image/png,image/jpeg">
-                                        {(props) => <Button {...props} variant="default" leftSection={<IconCamera size={16}/>}>Change Photo</Button>}
+                                    <FileButton onChange={handleFileChange} accept="image/png,image/jpeg">
+                                        {(props) => (
+                                            <Button {...props} variant="default" leftSection={<IconCamera size={16}/>}>
+                                                {newFile ? "Change Photo" : "Upload New Photo"}
+                                            </Button>
+                                        )}
                                     </FileButton>
-                                    {newFile && <Text size="sm">{newFile.name}</Text>}
+                                    {newFile && <Text size="sm" c="blue">{newFile.name}</Text>}
                                 </Group>
-                                <Text size="xs" c="orange">Note: Uploading a new photo will re-run the AI analysis!</Text>
                                 <Button loading={uploading} onClick={handleSave}>Save Changes</Button>
                             </Stack>
                         </Card>
                     )}
                 </Card>
 
-                {/* STATS GRID */}
+                {/* 2. STATS GRID */}
                 <Grid>
                     <Grid.Col span={4}>
                         <Card withBorder radius="md" padding="lg" ta="center">
@@ -348,16 +356,22 @@ export const ProfileView = ({ user, stats, identity, onUpdateProfile, uploading 
                     </Grid.Col>
                 </Grid>
 
-                {/* AI ANALYSIS CARD */}
+                {/* 3. AI ANALYSIS */}
                 <Card withBorder radius="lg" padding="lg">
                     <Group mb="sm">
                         <IconId color="gray" />
                         <Title order={4}>AI Persona Analysis</Title>
                     </Group>
-                    <Text size="sm" c="dimmed" fs="italic">
-                        "{identity?.roast_context || "No analysis available. Upload a photo to generate one."}"
-                    </Text>
+                    <Card bg="gray.1" radius="md" p="md">
+                        <Text size="sm" style={{ fontStyle: 'italic' }}>
+                            {(!identity?.roast_context || identity.roast_context === 'No photo provided') 
+                                ? "No photo uploaded. The AI doesn't know what you look like (and will roast you for it)." 
+                                : `"${identity.roast_context}"`
+                            }
+                        </Text>
+                    </Card>
                 </Card>
+
             </Stack>
         </Container>
     );

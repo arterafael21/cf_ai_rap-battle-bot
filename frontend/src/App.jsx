@@ -120,36 +120,51 @@ function RapBattleApp() {
         setUploading(false);
         fetchStats(user.id);
     }
-
+	
 	const updateProfileLogic = async (newName, newFile) => {
 		setUploading(true);
 		const token = await getToken();
 
 		try {
-			// 1. Upload Image
-			if (newFile) {
-				const formData = new FormData();
-				formData.append('image', newFile);
-				await fetch('/onboarding/upload', {
-					method: 'POST',
-					headers: { 'Authorization': `Bearer ${token}`},
-					body: formData
-				});
-			}
-
+			// 1. Update Name (if changed)
 			if (newName) {
-				await fetch('/onboarding/update', {
+				const res = await fetch('/onboarding/update', {
 					method: 'POST',
 					headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
 					body: JSON.stringify({ mcName: newName })
 				});
+				if (!res.ok) {
+					const data = await res.json();
+					throw new Error(data.error); 
+				}
+				// Update local state immediately
+				setIdentity(prev => ({ ...prev, mc_name: newName }));
 			}
 
-			// 3. Refresh Data
-			await fetchStats(user.id);
+			// 2. Upload Image (and get new AI description)
+			if (newFile) {
+				const formData = new FormData();
+				formData.append('image', newFile);
+				
+				const res = await fetch('/onboarding/upload', {
+					method: 'POST',
+					headers: { 'Authorization': `Bearer ${token}`},
+					body: formData
+				});
+
+				const data = await res.json();
+				if (data.description) {
+					setIdentity(prev => ({ ...prev, roast_context: data.description }));
+				}
+			}
+
+			// 3. Background refresh (just in case)
+			fetchStats(user.id);
 			alert("Profile Updated!");
+
 		} catch (e) {
 			alert("Update failed: " + e.message);
+			throw e; 
 		} finally {
 			setUploading(false);
 		}
