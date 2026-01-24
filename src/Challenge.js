@@ -145,11 +145,57 @@ export class Challenge {
 
     async runJudge(p1, p2, word) {
         try {
-            const prompt = `Judge this rap battle. 
-                MANDATORY WORD: "${word || 'NONE'}". If a word is specified, give +10 points if used.
-                YOU SHOULD ONLY OUTPUT THE RESULT IN JSON: { "p1_score": 5, "p2_score": 5, "comment": "..." } 
-                P1: "${p1.verse}"
-                P2: "${p2.verse}"`;
+            // 1. LOGIC: Only include word instructions if a real word exists
+            let wordInstructions = "";
+
+            if (word && word !== 'NONE') {
+                wordInstructions = `
+                MANDATORY CHALLENGE:
+                - The word is: "${word}".
+                - CHECK CAREFULLY: Did the rapper use this exact word?
+                - If YES: Add +10 points to their total score.
+                - If NO: 0 bonus points.
+                `;
+            }
+
+            // 2. PROMPT: Detailed Rubric
+            const prompt = `
+                You are the Supreme Battle Rap Judge. You must evaluate two verses based on this strict rubric. 
+                
+                VERSES TO JUDGE:
+                Player 1 (${p1.username}): "${p1.verse}"
+                Player 2 (${p2.username}): "${p2.verse}"
+
+                ${wordInstructions}
+
+                SCORING RUBRIC (0-10 per category):
+                1. RHYME SCHEME (1-10): 
+                - 1-3: No rhymes or very simple single-syllable rhymes (cat/hat).
+                - 4-7: Standard end-rhymes, some multi-syllabic attempts.
+                - 8-10: Complex multis, internal rhymes, and dense patterns.
+                
+                2. FLOW & METER (1-10):
+                - 1-3: Clunky, too many/few syllables, hard to read.
+                - 4-7: Standard readable rhythm.
+                - 8-10: Excellent cadence, rides the beat perfectly in text form.
+
+                3. BARS & CREATIVITY (1-10):
+                - 1-3: Generic insults ("you are bad"), clichés.
+                - 4-7: Good punchlines, standard metaphors.
+                - 8-10: Double entendres, clever wordplay, original angles.
+
+                4. AGGRESSION/DEFENSE (1-10):
+                - Did they actually address the opponent or just rap generic lines?
+                - 8-10 requires direct, relevant counters or brutal roasts.
+
+                OUTPUT FORMAT:
+                You must output ONLY valid JSON. Do not write anything else.
+                {
+                    "p1_score": number (total sum + bonus),
+                    "p2_score": number (total sum + bonus),
+                    "comment": "A 2-sentence summary of why the winner won. Be critical and specific."
+                }
+            `;
 
             const res = await this.env.AI.run('@cf/meta/llama-3-8b-instruct', {
                 messages: [{ role: 'user', content: prompt }]
@@ -168,6 +214,10 @@ export class Challenge {
 
             const winnerName = scores.p1_score > scores.p2_score ? p1.username : p2.username;
             const winnerCode = scores.p1_score > scores.p2_score ? 'p1_win' : 'p2_win';
+
+            if (scores.p1_score === scores.p2_score) {
+                return { winner: 'Draw', winnerCode: 'draw', scores };
+            }
 
             return { winner: winnerName, winnerCode, scores } 
         } catch (e) {

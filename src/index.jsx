@@ -68,13 +68,24 @@ app.post('/battle', async (c) => {
     });
     const aiVerse = rapperRes.response;
 
-	let judgeSystemPrompt = `You are a strict rap battle judge. Rate each 1-10 on Rhyme, Flow, Insults, Creativity.`;
+	let judgeSystemPrompt = `
+		You are a strict rap battle judge.
+		RUBRIC (Score 0-40 total):
+		1. Rhymes (1-10): Multis get high scores, simple rhymes get low.
+		2. Flow (1-10): Rhythm and readability.
+		3. Roasts (1-10): Direct insults vs generic filler.
+		4. Creativity (1-10): Wordplay and metaphors.
+		
+		RETURN JSON ONLY, nothing else: { "user": { "rhyme": 5, "flow": 5, "roast": 5, "creativity": 5, "word_bonus": 0 }, "ai": { "rhyme": 5, ... }, "comment": "..." }
+    `;
 
-	if (mandatoryWord) {
-		judgeSystemPrompt += ` MANDATORY RULE: The user MUST use the word "${mandatoryWord}". If they do, +10 points to 'word_bonus'. If not, 0 points.`;	
-	}
-
-	judgeSystemPrompt += ` Output JSON only: { "user": { "rhyme": 5, "word_bonus": 0 }, "ai": { "rhyme": 5 }, "comment": "..." }`;
+    // Only add mandatory rule if it is NOT null
+    if (mandatoryWord && mandatoryWord !== 'NONE') {
+        judgeSystemPrompt += ` 
+			MANDATORY RULE: Check if they used the word "${mandatoryWord}". 
+			If used, set "word_bonus": 10. If not, 0.
+        `;   
+    }
 
     // AI JUDGE
     const judgeRes = await c.env.AI.run('@cf/meta/llama-3-8b-instruct', {
