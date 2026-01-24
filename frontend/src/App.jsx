@@ -55,6 +55,7 @@ function RapBattleApp() {
     const [battleLog, setBattleLog] = useState([]);
     const [timeLeft, setTimeLeft] = useState(30); 
 	const hasAutoSubmitted = useRef(false);
+	const [rounds, setRounds] = useState(1);
     
     // WORD CHALLENGE STATE
     const [targetWord, setTargetWord] = useState(''); 
@@ -69,6 +70,14 @@ function RapBattleApp() {
     const audioChunks = useRef([]);
 	
     // INITIALIZATION
+	useEffect(() => {
+		if (mode === 'create_success' && ws.current && ws.current.readyState === WebSocket.OPEN) {
+			ws.current.send(JSON.stringify({
+				type: 'UPDATE_SETTINGS',
+				rounds: parseInt(rounds)
+			}));
+		}
+	}, [rounds, mode])
     useEffect(() => {
         if (user) {
             fetchStats(user.id);
@@ -743,9 +752,29 @@ function RapBattleApp() {
                                             </Group>
                                             
                                             <Divider style={{ width: '100%' }} label="Settings" labelPosition="center"/>
-                                            <SegmentedControl value={battleMode} onChange={setBattleMode} data={[{ label: 'Text', value: 'text' }, { label: 'Audio', value: 'audio' }]} />
-                                            <Switch label="Word Challenge" checked={wordMode} onChange={(e) => setWordMode(e.currentTarget.checked)} />
+
+											{/* ROUND SELECTOR */}
+											<Group>
+                                                <Text size="sm" fw={700}>Rounds:</Text>
+                                                <SegmentedControl 
+                                                    value={String(rounds)} 
+                                                    onChange={(val) => setRounds(Number(val))} 
+                                                    data={[
+                                                        { label: '1 Round', value: '1' },
+                                                        { label: '2 Rounds', value: '2' },
+                                                        { label: '3 Rounds', value: '3' }
+                                                    ]} 
+                                                />
+                                            </Group>
+
+											{/* MODE SELECTOR */}
+                                            <SegmentedControl 
+                                                value={battleMode} 
+                                                onChange={setBattleMode} 
+                                                data={[{ label: 'Text Mode', value: 'text' }, { label: 'Audio Mode', value: 'audio' }]} 
+                                            />
                                             
+                                            <Switch label="Word Challenge" checked={wordMode} onChange={(e) => setWordMode(e.currentTarget.checked)} />
                                             <Button variant="subtle" color="red" onClick={() => { ws.current.close(); setMode('menu'); }}>Cancel</Button>
                                         </Stack>
                                     </Card>

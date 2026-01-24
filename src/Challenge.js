@@ -76,36 +76,39 @@ export class Challenge {
                 // --- 3. SUBMIT TURN ---
                 if (event.type === 'SUBMIT_TURN') {
                     const isP1 = (this.p1 && this.p1.socket === webSocket);
+                    const sender = isP1 ? this.p1 : this.p2;
+                    const receiver = isP1 ? this.p2 : this.p1
                     
-                    // 1. Store the verse for judging later
-                    if (isP1) this.p1.verse = event.verse; 
-                    else this.p2.verse = event.verse;
+                    // Add to Transcript
+                    this.transcript.push({
+                        username: sender.username,
+                        text: event.verse,
+                        round: Math.ceil((this.transcript.length + 1) / 2)
+                    });
 
-                    // 2. Forward to opponent immediately (Real-time chat)
-                    const opponent = isP1 ? this.p2 : this.p1;
-                    if (opponent) {
-                        opponent.socket.send(JSON.stringify({
+                    // Forward to opponent immediately
+                    if (receiver) {
+                        receiver.socket.send(JSON.stringify({
                             type: 'NEW_VERSE',
                             verse: event.verse,
                             audioData: event.audioData
                         }));
                     }
+                    
+                    // Check Game End
+                    // Total turns needed = rounds * 2
+                    if (this.transcript.length >= this.rounds * 2) {
+                        // END GAME
+                        this.broadcast({ type: 'JUDGING' });
 
-                    // 3. Check Game End Condition (Simple 1-round logic FOR NOW)
-                    // If P2 just submitted, the battle is over.
-                    if (!isP1) {
-                        this.broadcast({ type: "JUDGING" });
-                        const result = await this.runJudge(this.p1, this.p2, this.mandatoryWord);
-                        
-                        // Save & Broadcast
-                        result.p1_verse = this.p1.verse;
-                        result.p2_verse = this.p2.verse;
-                        
+                        const result = await this.runJudge(this.transcript, this.mandatoryWord);
+
+                        // Save result
                         const savedID = await this.saveBattleToDB(result);
                         result.battle_id = savedID;
 
                         this.broadcast({ type: 'RESULT', result });
-                        await this.updateLeaderboard(result.winner);
+                        await this.updateLeaderboard(result.winner)
                     }
                 }
 
@@ -124,10 +127,11 @@ export class Challenge {
     startMatch() {
         if (!this.p1 || !this.p2) return;
 
-        // Broadcast Start. P1 goes first.
+        // Broadcast Start with Config
         const startMsg = { 
             type: 'MATCH_START', 
-            mandatoryWord: this.mandatoryWord 
+            mandatoryWord: this.mandatoryWord ,
+            rounds: this.rounds
         };
 
         try {
@@ -142,10 +146,10 @@ export class Challenge {
         });
     }
 
-    async runJudge(p1, p2, word) {
+    async runJudge(transcript, word) {
         try {
             // 1. Only include word instructions if a real word exists
-            let wordInstructions = "";
+            let battleText = transcript.map(t => `${t.username}: "${t.text}"`).join('\n');
 
             if (word && word !== 'NONE') {
                 wordInstructions = `
@@ -161,9 +165,8 @@ export class Challenge {
             const prompt = `
                 You are the Supreme Battle Rap Judge. You must evaluate two verses based on this strict rubric. 
                 
-                VERSES TO JUDGE:
-                Player 1 (${p1.username}): "${p1.verse}"
-                Player 2 (${p2.username}): "${p2.verse}"
+                TRANSCRIPT:
+                ${battleText}
 
                 ${wordInstructions}
 
@@ -192,6 +195,7 @@ export class Challenge {
                 {
                     "p1_score": number (total sum + bonus),
                     "p2_score": number (total sum + bonus),
+                    "winner": "Username of Winner"
                     "comment": "A 2-sentence summary of why the winner won. Be critical and specific."
                 }
             `;
@@ -209,16 +213,14 @@ export class Challenge {
                 console.error('Judge Output Invalid', res.response);
                 return { winner: 'Draw', scores: { comment: 'Judge was confused.', p1_score: 5, p2_score: 5 } };
             }
-            const scores = match ? JSON.parse(match[0]) : { p1_score: 5, p2_score: 5, comment: "AI Error" };
+            const data = JSON.parse(match[0]);
 
-            const winnerName = scores.p1_score > scores.p2_score ? p1.username : p2.username;
-            const winnerCode = scores.p1_score > scores.p2_score ? 'p1_win' : 'p2_win';
-
-            if (scores.p1_score === scores.p2_score) {
-                return { winner: 'Draw', winnerCode: 'draw', scores };
-            }
-
-            return { winner: winnerName, winnerCode, scores } 
+            return {
+                winner: data.winner,
+                p1_verse: transcript.filter((_, i) => i % 2 === 0).map(t => t.text).join('\n---\n'),
+                p2_verse: transcript.filter((_, i) => i % 2 !== 0).map(t => t.text).join('\n---\n'),
+                scores: data
+            };
         } catch (e) {
             console.error("Judge Exception", e);
             return { winner: 'Draw', scores: { comment: "Judge Glitched", p1_score: 0, p2_score: 0 } };
