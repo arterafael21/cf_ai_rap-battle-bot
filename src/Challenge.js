@@ -32,7 +32,7 @@ export class Challenge {
 
                 // --- CREATE ---
                 if (event.type === 'CREATE') {
-                    this.mandatoryWord = event.mandatoryWord || getRandomWord();
+                    this.mandatoryWord = event.mandatoryWord;
                     
                     this.status = 'OPEN';
                     this.finalResult = null;

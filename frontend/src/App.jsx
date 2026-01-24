@@ -1,142 +1,21 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-    MantineProvider, Container, Title, Card, Text, Textarea, Button, Group, Badge, Stack, Grid, ActionIcon, Loader, Tabs, Table, Input, CopyButton, Divider, Center, SegmentedControl, Switch, rem, Modal, FileButton, TextInput
+    MantineProvider, Container, Title, Card, Text, Button, Group, Badge, Stack, Grid, Loader, Tabs, Input, CopyButton, Divider, Center, SegmentedControl, Switch, rem, Modal, FileButton, TextInput, ActionIcon, Table
 } from '@mantine/core';
 import { 
-    IconMicrophone, IconMicrophoneOff, IconSend, IconTrash, IconPlayerPlay, IconTrophy, IconSwords, IconUsers, IconSearch, IconArrowLeft, IconBulb
+    IconMicrophone, IconMicrophoneOff, IconTrophy, IconSwords, IconUsers, IconSearch, IconArrowLeft, IconShare, IconKeyboard
 } from '@tabler/icons-react';
 import '@mantine/core/styles.css';
-import { ClerkProvider, SignedIn, SignedOut, SignInButton, UserButton, useUser, useAuth } from "@clerk/clerk-react";
-import { getRandomWord, OPPONENTS } from '../../src/constants'; 
+import { ClerkProvider, SignedIn, SignedOut, useUser, useAuth } from "@clerk/clerk-react";
+
+// IMPORTS
+import { getRandomWord } from '../../src/constants';
+import { AppHeader, WordDisplay, OpponentSelector, BattleInputArea, HistoryItem } from './components';
 
 const CLERK_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 if (!CLERK_KEY) throw new Error("Missing Publishable Key");
 
-// --- SUB-COMPONENTS (UI chunks) ---
-
-const AppHeader = ({ user, isLoaded, identity, stats }) => (
-    <Stack align="center" gap="xl" mb={50} mt="lg">
-        <Stack gap={0} align="center">
-            <Title order={1} size={48} fw={900} variant="gradient" gradient={{ from: 'blue', to: 'cyan', deg: 90 }} style={{ letterSpacing: '-1px' }}>
-                RAP BATTLE BOT
-            </Title>
-            <Text c="dimmed" fw={500} size="lg">
-                {!isLoaded ? "Loading..." : (identity?.mc_name ? identity.mc_name : `MC ${user?.firstName || 'Guest'}`)}
-            </Text>
-        </Stack>
-        <Group gap="md" p="xs" bg="gray.1" style={{ borderRadius: '50px', border: '1px solid #e9ecef' }}>
-            {!isLoaded ? null : (
-                <>
-                    <SignedOut>
-                        <SignInButton mode="modal">
-                            <Button radius="xl" variant="gradient" gradient={{ from: 'blue', to: 'cyan' }}>Sign In to Battle</Button>
-                        </SignInButton>
-                    </SignedOut>
-                    <SignedIn>
-                        <Badge size="lg" variant="dot" color="green" radius="sm" style={{ background: 'transparent', border: 'none' }}>
-                            Rank: {stats.rank}
-                        </Badge>
-                        <Divider orientation="vertical" />
-                        <Badge size="lg" variant="transparent" color="blue">Wins: {stats.wins}</Badge>
-                        <UserButton />
-                    </SignedIn>
-                </>
-            )}
-        </Group>
-    </Stack>
-);
-
-const WordDisplay = ({ word }) => (
-    <Card bg="yellow.1" radius="md" p="xs" mb="md" withBorder style={{ borderColor: '#fcc419' }}>
-        <Group justify="center" gap="xs">
-            <IconBulb size={20} color="orange" />
-            <Text fw={700} c="orange.9" size="sm">WORD OF THE ROUND:</Text>
-            <Badge size="lg" color="orange" variant="filled">{word}</Badge>
-        </Group>
-    </Card>
-);
-
-const OpponentSelector = ({ current, setOpponent }) => (
-    <Stack gap={5}>
-        <Text ta="center" size="xs" fw={700} c="dimmed" tt="uppercase">Select Your Opponent</Text>
-        <Group justify="center" gap="sm">
-            {Object.keys(OPPONENTS).map(key => (
-                <Button 
-                    key={key} 
-                    radius="md" size="sm"
-                    variant={current === key ? 'filled' : 'default'} 
-                    onClick={() => setOpponent(key)}
-                    color={current === key ? OPPONENTS[key].color : 'gray'}
-                >
-                    {OPPONENTS[key].name.toUpperCase()}
-                </Button>
-            ))}
-        </Group>
-    </Stack>
-);
-
-const BattleInputArea = ({ input, setInput, isRecording, toggleMic, handleSend, isLoading, status, placeholder, readOnly }) => (
-    <>
-        <Textarea 
-            placeholder={placeholder} 
-            minRows={5} radius="md" size="md"
-            value={input} 
-            onChange={(e) => setInput(e.currentTarget.value)}
-            readOnly={readOnly}
-            styles={{ input: { fontSize: '16px', backgroundColor: '#f8f9fa' } }} 
-        />
-        <Group justify="space-between" align="center" mt="md">
-            <Button 
-                size="md" color={isRecording ? 'red' : 'gray'} variant="light" radius="md"
-                onClick={toggleMic} 
-                leftSection={isRecording ? <IconMicrophoneOff size={18}/> : <IconMicrophone size={18}/>}
-            >
-                {isRecording ? 'Stop' : 'Record'}
-            </Button>
-            <Button 
-                size="md" radius="md" onClick={handleSend} loading={isLoading} 
-                variant="gradient" gradient={{ from: 'blue', to: 'indigo' }}
-                rightSection={<IconSend size={18} />}
-            >
-                Spit Fire
-            </Button>
-        </Group>
-        <Text size="xs" ta="center" c="dimmed" mt={5}>{status}</Text>
-    </>
-);
-
-const HistoryItem = ({ item, playAudio }) => (
-    <Card padding="lg" radius="md" withBorder mb="md">
-        <Group align="center" justify="space-between" mb="sm">
-            <Badge color={item.result === 'win' ? 'green' : 'red'} variant="light" size="sm">
-                {item.result === 'win' ? 'VICTORY' : 'DEFEAT'}
-            </Badge>
-            <Text size="xs" c="dimmed">{new Date(item.timestamp || Date.now()).toLocaleDateString()}</Text>
-        </Group>
-        <Grid gutter="lg" align="stretch">
-            <Grid.Col span={6}>
-                <Text size="xs" fw={700} c="blue" mb={5}>YOU</Text>
-                <Text size="sm" style={{ lineHeight: 1.6, whiteSpace: 'pre-line', fontStyle: 'italic', color: '#495057' }}>
-                    "{item.userRap}"
-                </Text>
-            </Grid.Col>
-            <Grid.Col span={6} style={{ borderLeft: '1px solid #f8f9fa' }} pl="lg">
-                <Group justify="space-between" mb={5}>
-                    <Text size="xs" fw={700} c="pink">{item.opponent?.toUpperCase()}</Text>
-                    <ActionIcon size="sm" variant="subtle" color="gray" onClick={() => playAudio(item.id, item.aiVerse, item.opponent)}>
-                        <IconPlayerPlay size={14} />
-                    </ActionIcon>
-                </Group>
-                <Text size="sm" style={{ whiteSpace: 'pre-line', lineHeight: 1.6, fontStyle: 'italic', color: '#495057' }}>
-                    "{item.aiVerse}"
-                </Text>
-            </Grid.Col>
-        </Grid>
-    </Card>
-);
-
 // --- MAIN LOGIC ---
-
 function RapBattleApp() {
     const { user, isLoaded } = useUser();
     const { getToken } = useAuth();
@@ -164,9 +43,11 @@ function RapBattleApp() {
     const [p1Data, setP1Data] = useState(null); 
     const [duelResult, setDuelResult] = useState(null); 
     const [battleMode, setBattleMode] = useState('text');
-    const [targetWord, setTargetWord] = useState(''); 
-	const [wordMode, setWordMode] = useState(false);
     
+    // WORD CHALLENGE STATE
+    const [targetWord, setTargetWord] = useState(''); 
+    const [wordMode, setWordMode] = useState(false);
+
     const ws = useRef(null);
     const [recordedBlob, setRecordedBlob] = useState(null);
     const [timer, setTimer] = useState(30);
@@ -184,6 +65,11 @@ function RapBattleApp() {
         fetchLeaderboard();
         refreshWord();
     }, [user]);
+
+    // LOGIC: REFRESH WORD WHEN TOGGLE IS TURNED ON
+    useEffect(() => {
+        if (wordMode) refreshWord();
+    }, [wordMode]);
 
     const refreshWord = () => setTargetWord(getRandomWord());
 
@@ -303,11 +189,7 @@ function RapBattleApp() {
             const res = await fetch('/battle', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                body: JSON.stringify({ 
-					userRap: input, 
-					opponent, 
-					mandatoryWord: wordMode ? targetWord : null
-				}),
+                body: JSON.stringify({ userRap: input, opponent, mandatoryWord: wordMode ? targetWord : null }),
             });
 
             setStatus('AI Writing...');
@@ -316,7 +198,7 @@ function RapBattleApp() {
             data.id = `battle-${Date.now()}`;
             saveHistory(data);
             setInput(''); 
-            refreshWord();
+            if (wordMode) refreshWord(); 
             fetchLeaderboard();
         } catch (e) { alert(e.message); setStatus('Error'); }
         setIsLoading(false);
@@ -402,11 +284,17 @@ function RapBattleApp() {
         ws.current = socket;
 
         socket.onopen = async () => {
+            console.log("WS Connected");
             if (action == "CREATE") {
                 let audioData = null;
                 if (selectedMode === 'audio' && recordedBlob) audioData = await blobToBase64(recordedBlob);
                 socket.send(JSON.stringify({ 
-                    type: 'CREATE', username: user?.firstName || 'Guest', verse: input, battleMode: selectedMode, audioData: audioData, mandatoryWord: targetWord
+                    type: 'CREATE', 
+                    username: user?.firstName || 'Guest', 
+                    verse: input, 
+                    battleMode: selectedMode, 
+                    audioData: audioData, 
+                    mandatoryWord: wordMode ? targetWord : null
                 }));
                 setMode('create_success');
             }
@@ -421,7 +309,12 @@ function RapBattleApp() {
             if (msg.type === "BATTLE_START") {
                 setP1Data({ name: msg.opponent, verse: msg.verse });
                 setBattleMode(msg.battleMode || 'text');
-                if (msg.mandatoryWord) setTargetWord(msg.mandatoryWord);
+                
+                if (msg.mandatoryWord) {
+                    setTargetWord(msg.mandatoryWord);
+                    setWordMode(true); // Auto-enable mode for P2 if word exists
+                }
+
                 setMode('fight');
                 if (msg.battleMode === 'audio') {
                     if (msg.audioData) { new Audio(msg.audioData).play().then(() => startTimer()); } 
@@ -494,22 +387,26 @@ function RapBattleApp() {
                         <Card padding={30} radius="lg" withBorder style={{ borderColor: '#eee' }}>
                             <Stack gap="lg">
                                 <OpponentSelector current={opponent} setOpponent={setOpponent} />
-                                <Group>
-									<Switch
-										label="Enable Word Challenge"
-										checked={wordMode}
-										onChange={(event) => setWordMode(event.currentTarget.checked)}
-										color="orange"
-										size="md"
-									/>
-								</Group>
-								{wordMode && <WordDisplay word={targetWord} />}
+                                
+                                <Group justify="end">
+                                    <Switch 
+                                        label="Word Challenge" 
+                                        checked={wordMode} 
+                                        onChange={(event) => setWordMode(event.currentTarget.checked)}
+                                        color="orange"
+                                        size="md"
+                                    />
+                                </Group>
+
+                                {wordMode && <WordDisplay word={targetWord} onRefresh={refreshWord} />}
+
                                 <Divider style={{ opacity: 0.5 }} />
+                                
                                 <BattleInputArea 
                                     input={input} setInput={setInput} 
                                     isRecording={isRecording} toggleMic={toggleMic} 
                                     handleSend={handleBattle} isLoading={isLoading} status={status} 
-                                    placeholder={`Write a rap containing "${targetWord}"...`} 
+                                    placeholder={wordMode ? `Freestyle using "${targetWord}"...` : "Freestyle your bars..."} 
                                 />
                             </Stack>
                         </Card>
@@ -545,9 +442,33 @@ function RapBattleApp() {
                     )}
                     {mode === 'create' && (
                         <Card shadow="sm" padding="lg" withBorder>
-                            <Group mb="md"><ActionIcon variant="subtle" onClick={() => setMode('menu')}><IconArrowLeft/></ActionIcon><Title order={4}>Record Your Opening Verse</Title></Group>
-                            <Switch size="lg" offLabel={<IconMicrophone style={{ width:rem(16), height:rem(16) }}/>} onLabel={<IconKeyboard style={{ width:rem(16), height:rem(16) }}/>} checked={battleMode === 'text'} onChange={(event) => setBattleMode(event.currentTarget.checked ? 'text' : 'audio')} label={battleMode === 'text' ? 'Text Mode' : 'Audio Mode'}/>
-                            <WordDisplay word={targetWord} />
+                            <Group mb="md">
+                                <ActionIcon variant="subtle" onClick={() => setMode('menu')}><IconArrowLeft/></ActionIcon>
+                                <Title order={4}>Record Your Opening Verse</Title>
+                            </Group>
+                            
+                            <Switch 
+                                size="lg" 
+                                offLabel={<IconMicrophone style={{ width:rem(16), height:rem(16) }}/>} 
+                                onLabel={<IconKeyboard style={{ width:rem(16), height:rem(16) }}/>} 
+                                checked={battleMode === 'text'} 
+                                onChange={(event) => setBattleMode(event.currentTarget.checked ? 'text' : 'audio')} 
+                                label={battleMode === 'text' ? 'Text Mode' : 'Audio Mode'}
+                            />
+                            
+                            {/* MULTIPLAYER WORD TOGGLE */}
+                            <Group justify="end" mt="md">
+                                <Switch 
+                                    label="Word Challenge" 
+                                    checked={wordMode} 
+                                    onChange={(e) => setWordMode(e.currentTarget.checked)} 
+                                    color="orange" 
+                                />
+                            </Group>
+                            
+                            {/* Centered Word Display with Refresh */}
+                            {wordMode && <WordDisplay word={targetWord} onRefresh={refreshWord} />}
+
                             <BattleInputArea 
                                 input={input} setInput={setInput} 
                                 isRecording={isRecording} toggleMic={toggleMic} 
@@ -574,7 +495,9 @@ function RapBattleApp() {
                         <Card shadow="sm" padding="lg" withBorder>
                             <Stack>
                                 <Group justify="space-between"><Title order={4}>Opponent: {p1Data.name}</Title><Badge color={battleMode === 'audio' ? 'pink' : 'gray'}>{battleMode === 'audio' ? 'Audio Battle' : 'Text Battle'}</Badge></Group>
-                                <WordDisplay word={targetWord} />
+                                
+                                {wordMode && <WordDisplay word={targetWord} />}
+                                
                                 {battleMode === 'audio' && (<Card bg={timer < 10 ? 'red.1' : 'blue.1'} mb="md" radius="md"><Group justify="space-between"><Text fw={700}>⏱️ TIME TO REPLY:</Text><Title order={3} c={timer < 10 ? 'red' : 'blue'}>{timer}s</Title></Group><div style={{ width: '100%', height: '6px', background: '#ddd', marginTop: '10px', borderRadius: '4px' }}><div style={{ width: `${(timer / 30) * 100}%`, height: '100%', background: timer < 10 ? 'red' : '#228be6', transition: 'width 1s linear', borderRadius: '4px'}}/></div></Card>)}
                                 <Card bg="gray.1" padding="md" radius="md"><Text size="lg" style={{fontStyle: 'italic', whiteSpace: 'pre-line'}}>"{p1Data.verse}"</Text></Card>
                                 <Divider label="Your Turn" labelPosition="center" />
@@ -588,6 +511,7 @@ function RapBattleApp() {
                             </Stack>
                         </Card>
                     )}
+                    {/* ... Result screens use HistoryItem or custom Card ... */}
                     {mode === 'judging' && (<Card h={300} withBorder><Center h="100%"><Stack align="center"><Loader size="xl" color="red" type="bars"/><Title order={3}>AI Judge is Deciding...</Title></Stack></Center></Card>)}
                     {mode === 'result' && duelResult && (
                         <Card shadow="sm" padding="xl" withBorder>
@@ -613,7 +537,7 @@ function RapBattleApp() {
 
             {mode === 'result' && !user && duelResult && (
                 <Card shadow="sm" padding="xl" withBorder mt="xl"><Stack align="center"><Badge color="red">REPLAY MODE</Badge><Title order={2}>Winner: {duelResult.winner}</Title>
-                <Grid style={{ width: '100%' }} gutter="lg"><Grid.Col span={6}><Card bg="blue.1" padding="sm" radius="md"><Text size="xs" fw={700} c="dimmed">PLAYER 1</Text><Text size="sm" style={{ fontStyle: 'italic' }}>"{duelResult.p1_verse}"</Text></Card></Grid.Col><Grid.Col span={6}><Card bg="red.1" padding="sm" radius="md"><Text size="xs" fw={700} c="dimmed">PLAYER 2</Text><Text size="sm" style={{fontStyle: 'italic'}}>"{duelResult.p2_verse}"</Text></Card></Grid.Col></Grid>
+                <Grid style={{ width: '100%' }} gutter="lg"><Grid.Col span={6}><Card bg="blue.1" padding="sm" radius="md"><Text size="xs" fw={700} c="dimmed">PLAYER 1</Text><Text size="sm" style={{ fontStyle: 'italic' }}>"{duelResult.p1_verse}"</Text></Card></Grid.Col><Grid.Col span={6}><Card bg="red.1" padding="sm" radius="md"><Text size="xs" fw={700} c="dimmed">PLAYER 2</Text><Text size="sm" style={{ fontStyle: 'italic' }}>"{duelResult.p2_verse}"</Text></Card></Grid.Col></Grid>
                 <Text c="dimmed" mt="md" ta="center">"{duelResult.scores.comment}"</Text><Button variant="light" leftSection={<IconShare size={16}/>} onClick={shareReplay}>Share This Replay</Button></Stack></Card>
             )}
 
