@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-    MantineProvider, Container, Title, Card, Text, Button, Group, Badge, Stack, Grid, Loader, Tabs, Input, CopyButton, Divider, Center, SegmentedControl, Switch, rem, Modal, FileButton, TextInput, ActionIcon, Table, Avatar
+    MantineProvider, Container, Title, Card, Text, Button, Group, Badge, Stack, Grid, Loader, Tabs, Input, CopyButton, Divider, Center, SegmentedControl, Switch, rem, Modal, FileButton, TextInput, ActionIcon, Table, Avatar, Textarea
 } from '@mantine/core';
 import { 
-    IconMicrophone, IconMicrophoneOff, IconTrophy, IconSwords, IconUsers, IconSearch, IconArrowLeft, IconShare, IconKeyboard, IconMusic, IconUserCircle, IconEdit
+    IconMicrophone, IconMicrophoneOff, IconTrophy, IconSwords, IconUsers, IconSearch, IconArrowLeft, IconShare, IconKeyboard, IconMusic, IconUserCircle, IconEdit, IconSend, IconPlayerPlay
 } from '@tabler/icons-react';
 import '@mantine/core/styles.css';
 import { ClerkProvider, SignedIn, SignedOut, useUser, useAuth, useClerk } from "@clerk/clerk-react";
@@ -17,9 +17,9 @@ if (!CLERK_KEY) throw new Error("Missing Publishable Key");
 
 // --- MAIN LOGIC ---
 function RapBattleApp() {
-    const { user, isLoaded } = useUser();
-    const { getToken } = useAuth();
-	const { signOut } = useClerk();
+   	const { user, isLoaded } = useUser();
+	const { getToken } = useAuth();
+    const { signOut } = useClerk();
 
     // STATE
     const [identity, setIdentity] = useState(null);
@@ -27,14 +27,14 @@ function RapBattleApp() {
     const [uploading, setUploading] = useState(false);
     const [onboardingName, setOnboardingName] = useState(''); 
     const [onboardingFile, setOnboardingFile] = useState(null);
-	const [avatarTs, setAvatarTs] = useState(Date.now());
+    const [avatarTs, setAvatarTs] = useState(Date.now());
     
     const [stats, setStats] = useState({ wins: 0, losses: 0, score: 0, rank: 'Novice' });
     const [leaderboard, setLeaderboard] = useState([]);
     const [leaderboardType, setLeaderboardType] = useState('single');
 
     const [history, setHistory] = useState([]);
-	const [lastBattle, setLastBattle] = useState(null);
+    const [lastBattle, setLastBattle] = useState(null);
     const [input, setInput] = useState(''); 
     const [opponent, setOpponent] = useState('roboflow');
     const [status, setStatus] = useState('Ready');
@@ -46,11 +46,15 @@ function RapBattleApp() {
     const [p1Data, setP1Data] = useState(null); 
     const [duelResult, setDuelResult] = useState(null); 
     const [battleMode, setBattleMode] = useState('text');
-	const [isQueuing, setIsQueuing] = useState(false);
-	const [myRole, setMyRole] = useState(null);
-	const [isOpponentTyping, setIsOpponentTyping] = useState(false);
-	const typingTimeoutRef = useRef(null);
-	const [mySubmittedVerse, setMySubmittedVerse] = useState('');
+    const [isQueuing, setIsQueuing] = useState(false);
+    const [isOpponentTyping, setIsOpponentTyping] = useState(false);
+    const typingTimeoutRef = useRef(null);
+    
+    // ARENA STATE
+    const [isMyTurn, setIsMyTurn] = useState(false);
+    const [battleLog, setBattleLog] = useState([]);
+    const [timeLeft, setTimeLeft] = useState(30); 
+	const hasAutoSubmitted = useRef(false);
     
     // WORD CHALLENGE STATE
     const [targetWord, setTargetWord] = useState(''); 
@@ -69,12 +73,45 @@ function RapBattleApp() {
         if (user) {
             fetchStats(user.id);
             loadHistory();
-        }
+        } else {
+			setMode('menu');
+		}
         fetchLeaderboard();
         refreshWord();
     }, [user]);
 
-    // LOGIC: REFRESH WORD WHEN TOGGLE IS TURNED ON
+	// TURN TIMER
+	useEffect(() => {
+		if (isMyTurn) {
+			hasAutoSubmitted.current = false;
+			setTimeLeft(30);
+		}
+	}, [isMyTurn]);
+
+	useEffect(() => {
+		let interval = null;
+		if (mode === 'arena' && isMyTurn) {
+			if (timeLeft > 0) {
+				interval = setInterval(() => {
+					setTimeLeft((prev) => prev - 1);
+				}, 1000);
+			} else if (timeLeft === 0 && !hasAutoSubmitted.current) {
+				hasAutoSubmitted.current = true;
+				submitTurn("(Time ran out!)");
+			}
+		}
+		return () => clearInterval(interval);
+	}, [mode, isMyTurn, timeLeft]);
+
+	const handleManualPlay = (log) => {
+		if (log.audio) {
+			new Audio(log.audio).play();
+		} else {
+			playAudio(`msg-${Date.now()}`, log.text, 'bytebeater');
+		}
+	};
+	
+    // REFRESH WORD WHEN TOGGLE IS TURNED ON
     useEffect(() => {
         if (wordMode) refreshWord();
     }, [wordMode]);
@@ -248,7 +285,7 @@ function RapBattleApp() {
 
     const shareReplay = () => {
         let link = window.location.href;
-        if (duelResult?.battle_id && !li,nk.includes('replay')) {
+        if (duelResult?.battle_id && !link.includes('replay')) {
             link = `${window.location.origin}${window.location.pathname}?replay=${duelResult.battle_id}`;
         }
         navigator.clipboard.writeText(link);
@@ -290,7 +327,7 @@ function RapBattleApp() {
             new Audio(audioCache.current[battleId]).play();
             return;
         }
-        setStatus('Generating Audio...');
+        setStatus('Playing Audio...');
         try {
             const res = await fetch('/speak', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -312,10 +349,12 @@ function RapBattleApp() {
             mediaRecorder.current = new MediaRecorder(stream);
             audioChunks.current = [];
             mediaRecorder.current.ondataavailable = (e) => audioChunks.current.push(e.data);
-            mediaRecorder.current.onstop = handleTranscription;
+            mediaRecorder.current.onstop = () => {
+				const blob = new Blob(audioChunks.current, { type: 'audio/webm' });
+				setRecordedBlob(blob);
+			};
             mediaRecorder.current.start();
             setIsRecording(true);
-            setStatus('Recording...');
         } catch (err) { alert('Microphone error: ' + err.message); }
     };
 
@@ -323,7 +362,6 @@ function RapBattleApp() {
         if (mediaRecorder.current) {
             mediaRecorder.current.stop();
             setIsRecording(false);
-            setStatus('⏳ Transcribing...');
         }
     };
 
@@ -346,10 +384,8 @@ function RapBattleApp() {
     });
 
     const startMultiplayer = () => {
-        if (!input) return alert("Write a verse first!");
         const roomID = Math.random().toString(36).substring(2, 7);
-        setBattleCode(roomID);
-        connectToBattleRoom(roomID, 'CREATE', input);
+        connectToBattleRoom(roomID, 'CREATE');
     };
   
     const joinMultiplayer = () => {
@@ -386,117 +422,97 @@ function RapBattleApp() {
 		setStatus('Ready');
 	}
 
-    const connectToBattleRoom = (roomID, role, pendingVerse=null) => {
+    const connectToBattleRoom = (roomID, role) => {
         if (ws.current) ws.current.close();
         setStatus('Connecting...');
         const socket = new WebSocket(`ws://127.0.0.1:8787/ws/battle/${roomID}`);
         ws.current = socket;
 
         socket.onopen = async () => {
-            console.log("WS Connected");
-			const myName = identity?.mc_name || user?.firstName || 'Guest';
-			socket.send(JSON.stringify({ 
-				type: 'INIT',
-				username: myName,
-				userId: user.id,
-				myName, role: role 
-			}));
+            const myName = identity?.mc_name || user?.firstName || 'Guest';
+            socket.send(JSON.stringify({ 
+                type: 'INIT', username: myName, userId: user.id, role: role 
+            }));
 
-            if (role == "CREATE") {
-				if (pendingVerse) {
-					setStatus('Sending Verse...');
-					setMySubmittedVerse(pendingVerse);
-
-					let audioData = null;
-					if (battleMode === 'audio' && recordedBlob) {
-						audioData = await blobToBase64(recordedBlob);
-					}
-
-					socket.send(JSON.stringify({
-						type: 'SUBMIT_VERSE',
-						verse: pendingVerse,
-						audioData: audioData,
-						mandatoryWord: wordMode ? targetWord : null
-					}))
-				} else {
-					setMode('create');
-				}
+            if (role === 'CREATE') {
+                setMode('create_success'); // Just show code
+                setBattleCode(roomID);
             } else {
-				setMode('waiting_for_opponent')
-			}
+                setMode('waiting_for_start'); // Waiting for handshake
+            }
         };
 
         socket.onmessage = (event) => {
             const msg = JSON.parse(event.data);
 
-			if (msg.type === 'OPPONENT_JOINED') {
-				console.log('Opponent joined:', msg.username);
-				setP1Data({ name: msg.username, id: msg.userId });
-				setMode('battle_wait');
-			}
-
-			if (msg.type === 'OPPONENT_TYPING') {
-				setIsOpponentTyping(true);
-				if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-				typingTimeoutRef.current = setTimeout(() => setIsOpponentTyping(false), 2000);
-			}
-
-			if (msg.type === 'OPPONENT_DISCONNECTED') {
-				alert('Your opponent fled the battle! Match Ended (No Contest)');
-				if (ws.current) ws.current.close();
-				setMode('menu');
-				setStatus('Ready');
-				return;
-			}
-
-            if (msg.type == 'WAITING_FOR_OPPONENT') setMode('waiting_for_opponent');
-
-            if (msg.type === "VERSE_ACCEPTED") {
-				setStatus('Verse sent! Waiting for P2...');
-				setMode('create_success');
-			}
-
-			if (msg.type === 'OPPONENT_JOINED') {
-				console.log("Opponent joined");
-			}
-			if (msg.type === "BATTLE_START") {
-                setP1Data({ name: msg.opponent, verse: msg.verse, id: msg.opponentId });
-                if (msg.mandatoryWord) { setTargetWord(msg.mandatoryWord); setWordMode(true); }
-				setStatus('Ready');
-				setInput('');
-                setMode('fight');
-                if (msg.battleMode === 'audio') {
-                    if (msg.audioData) { new Audio(msg.audioData).play().then(() => startTimer()); } 
-                    else { playAudio(`p1-${Date.now()}`, msg.verse, 'roboflow').then(() => startTimer()); }
-                }
+            if (msg.type === 'OPPONENT_JOINED') {
+                setP1Data({ name: msg.username, id: msg.userId });
             }
-            if (msg.type === "JUDGING") setMode('judging');
+
+            // --- START GAME ---
+            if (msg.type === 'MATCH_START') {
+                setIsMyTurn(msg.yourTurn);
+                setBattleLog([]);
+                setTimeLeft(30);
+                if (msg.mandatoryWord) { setTargetWord(msg.mandatoryWord); setWordMode(true); }
+                setMode('arena'); // <--- UNIFIED SCREEN
+            }
+
+            // --- RECEIVE TURN ---
+            if (msg.type === 'NEW_VERSE') {
+                // Add opponent verse to log
+                setBattleLog(prev => [...prev, { sender: 'opponent', text: msg.verse, audio: msg.audioData }]);
+                
+                // My Turn Now
+                setIsMyTurn(true);
+            }
+
+            if (msg.type === 'OPPONENT_TYPING') {
+                setIsOpponentTyping(true);
+                if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+                typingTimeoutRef.current = setTimeout(() => setIsOpponentTyping(false), 2000);
+            }
+
+            if (msg.type === 'OPPONENT_DISCONNECTED') {
+                alert("Opponent Left!");
+                setMode('menu');
+            }
+
             if (msg.type === 'RESULT') {
                 setDuelResult(msg.result);
                 setMode('result');
-                if (timerRef.current) clearInterval(timerRef.current);
-                const myName = identity?.mc_name || user?.firstName;
-                if (msg.result.p2_audio && myName !== msg.result.winner) new Audio(msg.result.p2_audio).play();
-                else if (msg.result.p2_verse) playAudio(`p2-${Date.now()}`, msg.result.p2_verse, 'bytebeater');
-                ws.current.close(); 
+                ws.current.close();
             }
         };
     };
 
-	// SUBMIT P1 VERSE (For Queue/Manual Create)
-    const submitP1Verse = async () => {
-        if (!input) return alert("Write something!");
-        let audioData = null;
-        if (battleMode === 'audio' && recordedBlob) audioData = await blobToBase64(recordedBlob);
-        
-        ws.current.send(JSON.stringify({
-            type: 'SUBMIT_VERSE',
-            verse: input,
-            audioData: audioData,
-            mandatoryWord: wordMode ? targetWord : null
-        }));
-        setStatus("Waiting for opponent...");
-    }
+	// SEND FUNCTION
+	const submitTurn = async (forcedText=null) => {
+		const textToSend = forcedText || input;
+		if (!textToSend && !recordedBlob) return;
+		
+		// 1. Local Update
+		setBattleLog(prev => [...prev, { sender: 'me', text: textToSend, audio: recordedBlob }]);
+
+		// 2. Prepare Data
+		let audioData = null;
+		if (battleMode === 'audio' && recordedBlob) {
+			audioData = await blobToBase64(recordedBlob);
+		}
+
+		// 3. Send
+		ws.current.send(JSON.stringify({
+			type: 'SUBMIT_TURN',
+			verse: textToSend,
+			audioData: audioData
+		}));
+		
+		// 4. Reset
+		setInput('');
+		setIsMyTurn(false);
+		setRecordedBlob(null);
+	}
+    
 
     const startTimer = () => {
         setTimer(30);
@@ -543,354 +559,382 @@ function RapBattleApp() {
 	}
 
     return (
-		<Container size="md" py="xl"> 
-			<Stack gap="lg" align="center">
-				
-				<AppHeader 
-                    user={user} 
-                    isLoaded={isLoaded} 
-                    identity={identity} 
-                    stats={stats} 
-                    avatarTs={avatarTs} 
-                    onLogout={() => signOut()}
-                    onEditProfile={() => { /* logic to switch tab */ }}
-                />
+        <>
+            {/* --- 1. SIGNED OUT VIEW --- */}
+            <SignedOut>
+                {mode === 'result' && duelResult ? (
+                    <Container size="md" py="xl">
+                        <Stack align="center">
+                            <Card shadow="xl" padding="xl" withBorder style={{ width: '100%' }}>
+                                <Stack align="center">
+                                    <Badge color="red" size="lg">REPLAY MODE</Badge>
+                                    <Title order={2}>Winner: {duelResult.winner}</Title>
+                                    
+                                    <Grid style={{ width: '100%' }} gutter="lg">
+                                        <Grid.Col span={6}>
+                                            <Card bg="blue.1" padding="sm" radius="md">
+                                                <Text size="xs" fw={700} c="dimmed">PLAYER 1</Text>
+                                                <Text size="sm" style={{ fontStyle: 'italic', whiteSpace: 'pre-line' }}>"{duelResult.p1_verse}"</Text>
+                                            </Card>
+                                        </Grid.Col>
+                                        <Grid.Col span={6}>
+                                            <Card bg="red.1" padding="sm" radius="md">
+                                                <Text size="xs" fw={700} c="dimmed">PLAYER 2</Text>
+                                                <Text size="sm" style={{ fontStyle: 'italic', whiteSpace: 'pre-line' }}>"{duelResult.p2_verse}"</Text>
+                                            </Card>
+                                        </Grid.Col>
+                                    </Grid>
+                                    
+                                    <Text c="dimmed" mt="md" ta="center" fs="italic">"{duelResult.scores.comment}"</Text>
+                                    
+                                    <Group mt="md">
+                                        <Button variant="light" leftSection={<IconShare size={16}/>} onClick={shareReplay}>Share</Button>
+                                        <Button onClick={() => { setMode('menu'); setDuelResult(null); }}>Exit to Home</Button>
+                                    </Group>
+                                </Stack>
+                            </Card>
+                        </Stack>
+                    </Container>
+                ) : (
+                    <SplashPage />
+                )}
+            </SignedOut>
 
-				<SignedOut>
-					<SplashPage />
-				</SignedOut>
+            {/* --- 2. SIGNED IN VIEW --- */}
+            <SignedIn>
+                <Container size="md" py="xl"> 
+                    <Stack gap="lg" align="center">
+                        
+                        <AppHeader 
+                            user={user} 
+                            isLoaded={isLoaded} 
+                            identity={identity} 
+                            stats={stats} 
+                            avatarTs={avatarTs} 
+                            onLogout={() => signOut()}
+                        />
 
-				<SignedIn>
-					<Tabs defaultValue="battle" keepMounted={false}>
-						<Tabs.List grow>
-							<Tabs.Tab value="battle" leftSection={<IconSwords size={18} />}>Single Player</Tabs.Tab>
-							<Tabs.Tab value="multiplayer" leftSection={<IconUsers size={18} />}>Multiplayer</Tabs.Tab>
-							<Tabs.Tab value="leaderboard" leftSection={<IconTrophy size={18} />}>Leaderboard</Tabs.Tab>
-							<Tabs.Tab value="profile" leftSection={<IconUserCircle size={18} />}>Profile</Tabs.Tab>
-						</Tabs.List>
+                        <Tabs defaultValue="battle" keepMounted={false}>
+                            <Tabs.List grow>
+                                <Tabs.Tab value="battle" leftSection={<IconSwords size={18} />}>Single Player</Tabs.Tab>
+                                <Tabs.Tab value="multiplayer" leftSection={<IconUsers size={18} />}>Multiplayer</Tabs.Tab>
+                                <Tabs.Tab value="leaderboard" leftSection={<IconTrophy size={18} />}>Leaderboard</Tabs.Tab>
+                                <Tabs.Tab value="profile" leftSection={<IconUserCircle size={18} />}>Profile</Tabs.Tab>
+                            </Tabs.List>
 
-						<Tabs.Panel value="battle" pt="lg">
-							<Container size="sm"> 
-								<Card padding={30} radius="lg" withBorder style={{ borderColor: '#eee' }}>
-									<Stack gap="lg">
-										<OpponentSelector current={opponent} setOpponent={setOpponent} />
-										<Group justify="center">
-											<Switch label="Word Challenge" checked={wordMode} onChange={(e) => setWordMode(e.currentTarget.checked)} color="orange" size="md"/>
-										</Group>
-										{wordMode && <WordDisplay word={targetWord} onRefresh={refreshWord} />}
-										<Divider style={{ opacity: 0.5 }} />
-										<BattleInputArea 
-											input={input} setInput={setInput} 
-											isRecording={isRecording} toggleMic={toggleMic} 
-											handleSend={handleBattle} isLoading={isLoading} status={status} 
-											placeholder={wordMode ? `Freestyle using "${targetWord}"...` : "Freestyle your bars..."} 
-										/>
-									</Stack>
-								</Card>
+                            {/* --- 3. SINGLE PLAYER TAB --- */}
+                            <Tabs.Panel value="battle" pt="lg">
+                                <Container size="sm"> 
+                                    <Card padding={30} radius="lg" withBorder style={{ borderColor: '#eee' }}>
+                                        <Stack gap="lg">
+                                            <OpponentSelector current={opponent} setOpponent={setOpponent} />
+                                            <Group justify="center">
+                                                <Switch label="Word Challenge" checked={wordMode} onChange={(e) => setWordMode(e.currentTarget.checked)} color="orange" size="md"/>
+                                            </Group>
+                                            {wordMode && <WordDisplay word={targetWord} onRefresh={refreshWord} />}
+                                            <Divider style={{ opacity: 0.5 }} />
+                                            <BattleInputArea 
+                                                input={input} setInput={setInput} 
+                                                isRecording={isRecording} toggleMic={toggleMic} 
+                                                handleSend={handleBattle} isLoading={isLoading} status={status} 
+                                                placeholder={wordMode ? `Freestyle using "${targetWord}"...` : "Freestyle your bars..."} 
+                                            />
+                                        </Stack>
+                                    </Card>
 
-								{lastBattle && (
-									<Card mt="lg" padding="lg" radius="md" withBorder bg="gray.0">
-										<Group justify="space-between" mb="sm">
-											<Title order={4}>Last Round Results</Title>
-											<Badge color={lastBattle.result === 'win' ? 'green' : 'red'} size="lg">{lastBattle.result.toUpperCase()}</Badge>
-										</Group>
-										<Grid>
-											<Grid.Col span={6}>
-												<Card bg="white" withBorder>
-													<Text size="xs" c="dimmed" fw={700}>YOU ({identity?.mc_name || 'User'})</Text>
-													<Title order={2} c="blue">{lastBattle.scores.user.total}</Title>
-													<Text size="xs" mt={5}>Rhyme: {lastBattle.scores.user.rhyme} | Flow: {lastBattle.scores.user.flow}</Text>
-												</Card>
-											</Grid.Col>
-											<Grid.Col span={6}>
-												<Card bg="white" withBorder>
-													<Text size="xs" c="dimmed" fw={700}>{lastBattle.opponent.toUpperCase()}</Text>
-													<Title order={2} c="red">{lastBattle.scores.ai.total}</Title>
-													<Text size="xs" mt={5}>Rhyme: {lastBattle.scores.ai.rhyme} | Flow: {lastBattle.scores.ai.flow}</Text>
-												</Card>
-											</Grid.Col>
-										</Grid>
-										<Text size="sm" mt="md" fs="italic" c="dimmed" ta="center">"{lastBattle.scores.comment}"</Text>
-										
-										<Divider my="md" />
-										
-										<Text size="xs" fw={700} c="dimmed">AI VERSE:</Text>
-										<Text style={{ whiteSpace: 'pre-line', fontStyle: 'italic' }}>"{lastBattle.aiVerse}"</Text>
-										<Button variant="subtle" size="xs" mt="xs" leftSection={<IconMusic size={14}/>} onClick={() => playAudio('last-battle', lastBattle.aiVerse, opponent)}>Play Audio</Button>
-									</Card>
-								)}
-							</Container>
-						</Tabs.Panel>
+                                    {lastBattle && (
+                                        <Card mt="lg" padding="lg" radius="md" withBorder bg="gray.0">
+                                            <Group justify="space-between" mb="sm">
+                                                <Title order={4}>Last Round Results</Title>
+                                                <Badge color={lastBattle.result === 'win' ? 'green' : 'red'} size="lg">{lastBattle.result.toUpperCase()}</Badge>
+                                            </Group>
+                                            <Grid>
+                                                <Grid.Col span={6}>
+                                                    <Card bg="white" withBorder>
+                                                        <Text size="xs" c="dimmed" fw={700}>YOU ({identity?.mc_name || 'User'})</Text>
+                                                        <Title order={2} c="blue">{lastBattle.scores.user.total}</Title>
+                                                        <Text size="xs" mt={5}>Rhyme: {lastBattle.scores.user.rhyme} | Flow: {lastBattle.scores.user.flow}</Text>
+                                                    </Card>
+                                                </Grid.Col>
+                                                <Grid.Col span={6}>
+                                                    <Card bg="white" withBorder>
+                                                        <Text size="xs" c="dimmed" fw={700}>{lastBattle.opponent.toUpperCase()}</Text>
+                                                        <Title order={2} c="red">{lastBattle.scores.ai.total}</Title>
+                                                        <Text size="xs" mt={5}>Rhyme: {lastBattle.scores.ai.rhyme} | Flow: {lastBattle.scores.ai.flow}</Text>
+                                                    </Card>
+                                                </Grid.Col>
+                                            </Grid>
+                                            <Text size="sm" mt="md" fs="italic" c="dimmed" ta="center">"{lastBattle.scores.comment}"</Text>
+                                            
+                                            <Divider my="md" />
+                                            
+                                            <Text size="xs" fw={700} c="dimmed">AI VERSE:</Text>
+                                            <Text style={{ whiteSpace: 'pre-line', fontStyle: 'italic' }}>"{lastBattle.aiVerse}"</Text>
+                                            <Button variant="subtle" size="xs" mt="xs" leftSection={<IconMusic size={14}/>} onClick={() => playAudio('last-battle', lastBattle.aiVerse, opponent)}>Play Audio</Button>
+                                        </Card>
+                                    )}
+                                </Container>
+                            </Tabs.Panel>
 
-						<Tabs.Panel value="multiplayer" pt="md">
-							{mode === 'menu' && (
-								<Stack>
-									<Card shadow="md" padding="xl" radius="lg" withBorder style={{ borderColor: '#228be6', borderWidth: 2 }}>
-										<Stack align="center" gap="md">
-											<Title order={3} c="blue">QUICK PLAY</Title>
-											<Text ta="center" size="sm" c="dimmed">Enter the global queue and get matched instantly.</Text>
-											
-											{!isQueuing ? (
-												<Button 
-													size="xl" 
-													fullWidth 
-													radius="md" 
-													variant="gradient" 
-													gradient={{ from: 'blue', to: 'cyan' }}
-													onClick={joinQueue}
-													leftSection={<IconSwords size={28} />}
-												>
-													FIND MATCH
-												</Button>
-											) : (
-												<Button 
-													size="xl" 
-													fullWidth 
-													radius="md" 
-													color="red" 
-													variant="outline"
-													onClick={cancelQueue}
-												>
-													CANCEL SEARCH
-												</Button>
-											)}
-											{isQueuing && <Loader color="blue" type="dots" />}
-										</Stack>
-									</Card>
+                            {/* --- 4. MULTIPLAYER TAB --- */}
+                            <Tabs.Panel value="multiplayer" pt="md">
+                                {mode === 'menu' && (
+                                    <Stack>
+                                        <Card shadow="md" padding="xl" radius="lg" withBorder style={{ borderColor: '#228be6', borderWidth: 2 }}>
+                                            <Stack align="center" gap="md">
+                                                <Title order={3} c="blue">QUICK PLAY</Title>
+                                                <Text ta="center" size="sm" c="dimmed">Enter the global queue and get matched instantly.</Text>
+                                                
+                                                {!isQueuing ? (
+                                                    <Button 
+                                                        size="xl" fullWidth radius="md" 
+                                                        variant="gradient" gradient={{ from: 'blue', to: 'cyan' }}
+                                                        onClick={joinQueue} leftSection={<IconSwords size={28} />}
+                                                    >
+                                                        FIND MATCH
+                                                    </Button>
+                                                ) : (
+                                                    <Button 
+                                                        size="xl" fullWidth radius="md" 
+                                                        color="red" variant="outline"
+                                                        onClick={cancelQueue}
+                                                    >
+                                                        CANCEL SEARCH
+                                                    </Button>
+                                                )}
+                                                {isQueuing && <Loader color="blue" type="dots" />}
+                                            </Stack>
+                                        </Card>
 
-									<Divider label="OR" labelPosition="center" my="sm" />
+                                        <Divider label="OR" labelPosition="center" my="sm" />
 
-									<Grid>
-										<Grid.Col span={6}>
-											<Card shadow="sm" padding="lg" radius="md" withBorder style={{height: '100%'}}>
-												<Stack align="center" justify="center" h={120}>
-													<IconUsers size={32} color="#228be6" />
-													<Title order={5}>Private Room</Title>
-													<Button variant="light" fullWidth onClick={() => setMode('create')}>Create</Button>
-												</Stack>
-											</Card>
-										</Grid.Col>
-										<Grid.Col span={6}>
-											<Card shadow="sm" padding="lg" radius="md" withBorder style={{height: '100%'}}>
-												<Stack align="center" justify="center" h={120}>
-													<IconSearch size={32} color="#fa5252" />
-													<Title order={5}>Join Room</Title>
-													<Button variant="light" color="red" fullWidth onClick={() => setMode('join')}>Enter Code</Button>
-												</Stack>
-											</Card>
-										</Grid.Col>
-									</Grid>
-								</Stack>
-							)}
-							{mode === 'create' && (
-								<Container size="sm">
-									<Card padding="lg" radius="lg" withBorder>
-										<Stack gap="lg">
-											<Group justify="space-between">
-												<ActionIcon variant="subtle" color="gray" onClick={() => setMode('menu')}><IconArrowLeft /></ActionIcon>
-												<Title order={4}>Battle Setup</Title>
-												<div style={{ width: 28 }} /> 
-											</Group>
+                                        <Grid>
+                                            <Grid.Col span={6}>
+                                                <Card shadow="sm" padding="lg" radius="md" withBorder style={{height: '100%'}}>
+                                                    <Stack align="center" justify="center" h={120}>
+                                                        <IconUsers size={32} color="#228be6" />
+                                                        <Title order={5}>Private Room</Title>
+                                                        <Button variant="light" fullWidth onClick={startMultiplayer}>Create</Button>
+                                                    </Stack>
+                                                </Card>
+                                            </Grid.Col>
+                                            <Grid.Col span={6}>
+                                                <Card shadow="sm" padding="lg" radius="md" withBorder style={{height: '100%'}}>
+                                                    <Stack align="center" justify="center" h={120}>
+                                                        <IconSearch size={32} color="#fa5252" />
+                                                        <Title order={5}>Join Room</Title>
+                                                        <Button variant="light" color="red" fullWidth onClick={() => setMode('join')}>Enter Code</Button>
+                                                    </Stack>
+                                                </Card>
+                                            </Grid.Col>
+                                        </Grid>
+                                    </Stack>
+                                )}
 
-											<Card bg="gray.0" radius="md" p="md">
-												<Stack gap="md">
-													<Text size="sm" fw={700} ta="center" c="dimmed">GAME MODE</Text>
-													<SegmentedControl
-														fullWidth
-														value={battleMode}
-														onChange={setBattleMode}
-														data={[
-															{ label: 'Text Battle', value: 'text', icon: <IconKeyboard size={16} /> },
-															{ label: 'Audio Battle', value: 'audio', icon: <IconMusic size={16} /> },
-														]}
-													/>
-													
-													<Divider />
-													
-													<Center>
-														<Switch 
-															label="Word Challenge Mode" 
-															checked={wordMode} 
-															onChange={(e) => setWordMode(e.currentTarget.checked)} 
-															color="orange"
-															size="md"
-														/>
-													</Center>
-													
-													{wordMode && <WordDisplay word={targetWord} onRefresh={refreshWord} />}
-												</Stack>
-											</Card>
+                                {mode === 'create_success' && (
+                                    <Card shadow="sm" padding="xl" withBorder>
+                                        <Stack align="center">
+                                            <Loader size="lg" variant="dots" />
+                                            <Title order={3}>Waiting for Opponent</Title>
+                                            <Group>
+                                                <Text fw={700}>CODE:</Text>
+                                                <Badge size="xl" variant="filled" color="dark">{battleCode}</Badge>
+                                                <CopyButton value={battleCode}>{({ copied, copy }) => (<Button size="xs" onClick={copy}>{copied ? 'Copied' : 'Copy'}</Button>)}</CopyButton>
+                                            </Group>
+                                            
+                                            <Divider style={{ width: '100%' }} label="Settings" labelPosition="center"/>
+                                            <SegmentedControl value={battleMode} onChange={setBattleMode} data={[{ label: 'Text', value: 'text' }, { label: 'Audio', value: 'audio' }]} />
+                                            <Switch label="Word Challenge" checked={wordMode} onChange={(e) => setWordMode(e.currentTarget.checked)} />
+                                            
+                                            <Button variant="subtle" color="red" onClick={() => { ws.current.close(); setMode('menu'); }}>Cancel</Button>
+                                        </Stack>
+                                    </Card>
+                                )}
 
-											<Title order={5} ta="center">Record Opening Verse</Title>
-											<BattleInputArea 
-												input={input} setInput={setInput} 
-												isRecording={isRecording} toggleMic={toggleMic} 
-												handleSend={battleCode ? submitP1Verse : startMultiplayer} isLoading={isLoading} status={status} 
-												placeholder={battleMode === 'audio' ? 'Press Record...' : 'Type your verse...'} 
-												readOnly={battleMode === 'audio'}
-											/>
-										</Stack>
-									</Card>
-								</Container>
-							)}
-							{mode === 'create_success' && (
-								<Card shadow="sm" padding="xl" withBorder>
-									<Stack align="center"><IconTrophy size={64} color="gold" /><Title order={3}>Battle Room Ready!</Title>
-									<Group><Badge size="xl" variant="filled" color="dark">{battleCode}</Badge><CopyButton value={battleCode}>{({ copied, copy }) => (<Button color={copied ? 'teal' : 'blue'} onClick={copy}>{copied ? 'Copied' : 'Copy Code'}</Button>)}</CopyButton></Group>
-									<Text c="dimmed" size="xs">Waiting for opponent to join...</Text><Button variant="subtle" onClick={() => { ws.current.close(); setMode('menu'); }}>Cancel</Button></Stack>
-								</Card>
-							)}
-							{mode === 'join' && (
-								<Card shadow="sm" padding="lg" withBorder>
-									<Group mb="md"><ActionIcon variant="subtle" onClick={() => setMode('menu')}><IconArrowLeft/></ActionIcon><Title order={4}>Enter Battle Code</Title></Group>
-									<Group><Input placeholder="e.g. 1234abc" style={{flex: 1}} value={battleCode} onChange={(e) => setBattleCode(e.currentTarget.value)}/><Button onClick={joinMultiplayer} loading={isLoading} leftSection={<IconSearch size={16}/>}>Join</Button></Group>
-								</Card>
-							)}
-							{mode === 'fight' && p1Data && (
-								<Card shadow="sm" padding="lg" withBorder>
-									<Stack>
-										<Group justify="space-between">
-											<Group>
-												<Avatar 
-													src={p1Data?.id ? `/avatar/${p1Data.id}?t=${Date.now()}` : null} 
-													radius="xl" size="md" color="blue"
-												>
-													{p1Data?.name?.[0]}
-												</Avatar>
-												<Title order={4}>{p1Data.name}</Title>
-											</Group>
-											<Title order={4}>Opponent: {p1Data.name}</Title>
-											<Badge color={battleMode === 'audio' ? 'pink' : 'gray'}>{battleMode === 'audio' ? 'Audio Battle' : 'Text Battle'}</Badge>
-										</Group>
-										
-										{wordMode && <WordDisplay word={targetWord} />}
-										
-										{battleMode === 'audio' && (<Card bg={timer < 10 ? 'red.1' : 'blue.1'} mb="md" radius="md"><Group justify="space-between"><Text fw={700}>⏱️ TIME TO REPLY:</Text><Title order={3} c={timer < 10 ? 'red' : 'blue'}>{timer}s</Title></Group><div style={{ width: '100%', height: '6px', background: '#ddd', marginTop: '10px', borderRadius: '4px' }}><div style={{ width: `${(timer / 30) * 100}%`, height: '100%', background: timer < 10 ? 'red' : '#228be6', transition: 'width 1s linear', borderRadius: '4px'}}/></div></Card>)}
-										<Card bg="gray.1" padding="md" radius="md"><Text size="lg" style={{fontStyle: 'italic', whiteSpace: 'pre-line'}}>"{p1Data.verse}"</Text></Card>
-										<Divider label="Your Turn" labelPosition="center" />
-										<BattleInputArea 
-											input={input} setInput={setInput} 
-											isRecording={isRecording} toggleMic={toggleMic} 
-											handleSend={sendWsReply} isLoading={isLoading} status={status} 
-											placeholder="Write your comeback..." 
-											readOnly={battleMode === 'audio'}
-										/>
-									</Stack>
-								</Card>
-							)}
-							{mode === 'judging' && (<Card h={300} withBorder><Center h="100%"><Stack align="center"><Loader size="xl" color="red" type="bars"/><Title order={3}>AI Judge is Deciding...</Title></Stack></Center></Card>)}
-							{mode === 'result' && duelResult && (
-								<Card shadow="sm" padding="xl" withBorder>
-									<Stack align="center"><Title order={2}>Winner: {duelResult.winner}</Title>
-									<Grid style={{ width: '100%' }} gutter="lg"><Grid.Col span={6}><Card bg="blue.1" padding="sm" radius="md"><Text size="xs" fw={700} c="dimmed">PLAYER 1</Text><Text size="sm" style={{ fontStyle: 'italic', whiteSpace: 'pre-line' }}>"{duelResult.p1_verse}"</Text></Card></Grid.Col><Grid.Col span={6}><Card bg="red.1" padding="sm" radius="md"><Text size="xs" fw={700} c="dimmed">PLAYER 2</Text><Text size="sm" style={{ fontStyle: 'italic', whiteSpace: 'pre-line' }}>"{duelResult.p2_verse}"</Text></Card></Grid.Col></Grid>
-									<Group gap="xl" mt="md"><Stack align="center"><Text fw={700}>P1 Score</Text><Badge size="xl" color={duelResult.winnerCode === 'p1_win' ? 'green' : 'grey'}>{duelResult.scores.p1_score}</Badge></Stack><Title order={3}>VS</Title><Stack align="center"><Text fw={700}>P2 Score</Text><Badge size="xl" color={duelResult.winnerCode === 'p2_win' ? 'green' : 'gray'}>{duelResult.scores.p2_score}</Badge></Stack></Group>
-									<Text c="dimmed" mt="md" ta="center">"{duelResult.scores.comment}"</Text><Button mt="lg" onClick={() => { setMode("menu"); setInput(''); }}>Back to Menu</Button>
-									{window.location.search.includes('replay') && (<Button variant="light" leftSection={<IconShare size={16}/>} onClick={shareReplay}>Share Replay</Button>)}
-									</Stack>
-								</Card>
-							)}
+                                {mode === 'join' && (
+                                    <Card shadow="sm" padding="lg" withBorder>
+                                        <Group mb="md"><ActionIcon variant="subtle" onClick={() => setMode('menu')}><IconArrowLeft/></ActionIcon><Title order={4}>Enter Battle Code</Title></Group>
+                                        <Group><Input placeholder="e.g. 1234abc" style={{flex: 1}} value={battleCode} onChange={(e) => setBattleCode(e.currentTarget.value)}/><Button onClick={joinMultiplayer} loading={isLoading} leftSection={<IconSearch size={16}/>}>Join</Button></Group>
+                                    </Card>
+                                )}
 
-							{mode === 'waiting_for_opponent' && (
-								<Card shadow="sm" padding="xl" withBorder>
-									<Stack align="center">
-										<Loader size="xl" type="dots" />
-										<Title order={3}>Waiting for Opponent...</Title>
-										<Text c="dimmed">Preparing the battle arena.</Text>
-										<Button variant="subtle" color="red" onClick={() => { 
-											if(ws.current) ws.current.close(); 
-											setMode('menu'); 
-										}}>
-											Cancel
-										</Button>
-									</Stack>
-								</Card>
-							)}
+                                {mode === 'waiting_for_start' && (
+                                    <Card shadow="sm" padding="xl" withBorder>
+                                        <Stack align="center">
+                                            <Loader size="xl" type="dots" />
+                                            <Title order={3}>Connecting to Arena...</Title>
+                                            <Text c="dimmed">Waiting for host to sync settings.</Text>
+                                            <Button variant="subtle" color="red" onClick={() => { 
+                                                if(ws.current) ws.current.close(); 
+                                                setMode('menu'); 
+                                            }}>
+                                                Cancel
+                                            </Button>
+                                        </Stack>
+                                    </Card>
+                                )}
 
-							{mode === 'battle_wait' && (
-								<Card shadow="sm" padding="lg" withBorder>
-									<Stack>
-										<Group justify="space-between">
-											<Group>
-												<Avatar 
-													src={p1Data?.id ? `/avatar/${p1Data.id}?t=${Date.now()}` : null} 
-													radius="xl" size="md" color="blue"
-												>
-													{p1Data?.name?.[0]}
-												</Avatar>
-												<Title order={4}>{p1Data?.name || "Unknown"}</Title>
-											</Group>
-											<Badge color="yellow" variant="light">Opponent's Turn</Badge>
-										</Group>
+                                {mode === 'arena' && (
+                                    <Card shadow="sm" padding="lg" withBorder>
+                                        <Stack gap="md">
+                                            <Group justify="space-between">
+                                                <Group>
+                                                    <Avatar src={p1Data?.id ? `/avatar/${p1Data?.id}?t=${Date.now()}` : null} radius="xl" color="blue">{p1Data?.name?.[0]}</Avatar>
+                                                    <Stack gap={0}>
+                                                        <Text size="xs" c="dimmed">OPPONENT</Text>
+                                                        <Title order={5}>{p1Data?.name || "Unknown"}</Title>
+                                                    </Stack>
+                                                </Group>
+                                                <Badge 
+                                                    size="xl" 
+                                                    variant="filled"
+                                                    color={isMyTurn ? (timeLeft < 10 ? 'red' : 'green') : 'gray'}
+                                                >
+                                                    {isMyTurn ? `YOUR TURN: ${timeLeft}s` : "THEIR TURN"}
+                                                </Badge>
+                                            </Group>
 
-										{/* P1's VERSE (Already submitted) */}
-										<Card bg="blue.1" padding="md" radius="md" style={{ alignSelf: 'flex-end', maxWidth: '80%' }}>
-											<Text size="sm" style={{ whiteSpace: 'pre-line' }}>{mySubmittedVerse}</Text>
-										</Card>
-										<Text size="xs" c="dimmed" ta="right">You</Text>
+                                            {wordMode && <WordDisplay word={targetWord} />}
+                                            <Divider />
 
-										<Divider my="sm" />
+											{/* CHAT LOG */}
+                                            <Stack gap="sm" style={{ height: 300, overflowY: 'auto' }}>
+                                                {battleLog.length === 0 && <Text c="dimmed" ta="center" fs="italic" mt="xl">The battle begins! {isMyTurn ? "You go first!" : "Opponent goes first."}</Text>}
+                                                
+                                                {battleLog.map((log, i) => (
+                                                    <Group key={i} justify={log.sender === 'me' ? 'flex-end' : 'flex-start'} align="flex-start">
+														{/* OPPONENT AVATAR */}
+                                                        {log.sender !== 'me' && <Avatar size="sm" radius="xl" src={`/avatar/${p1Data?.id}`} />}
 
-										{/* P2's AREA (Typing Indicator) */}
-										<Group align="flex-start">
-											<IconUserCircle size={32} color="gray" />
-											{isOpponentTyping ? (
-												<Card bg="gray.1" padding="xs" radius="xl">
-													<Text size="sm" fw={700} c="dimmed">
-														Typing<span className="typing-dots">...</span>
-													</Text>
-												</Card>
-											) : (
-												<Text size="sm" c="dimmed" fs="italic">Thinking of a comeback...</Text>
-											)}
-										</Group>
-									</Stack>
-								</Card>
-							)}
+														{/* MESSAGE BUBBLE */}
+                                                        <Card bg={log.sender === 'me' ? 'blue.1' : 'gray.1'} radius="md" p="sm" style={{ maxWidth: '80%' }}>
+															<Group gap="xs">
+																{/* PLAY BUTTON (Always Visible) */}
+																<ActionIcon 
+																	variant="light" color={log.sender === 'me' ? 'blue' : 'dark'} radius="xl" 
+																	onClick={() => handleManualPlay(log)}
+																>
+																	<IconPlayerPlay size={14} />
+																</ActionIcon>
+																{/* TEXT CONTENT */}
+																<Text size="sm" style={{ whiteSpace: 'pre-line' }}>
+																	{log.audio ? "(Audio Verse)" : log.text}
+																</Text>
+															</Group>
+                                                        </Card>
 
-						</Tabs.Panel>
+														{/* MY AVATAR */}
+                                                        {log.sender === 'me' && (
+                                                            <Avatar size="sm" radius="xl" src={user?.id ? `/avatar/${user.id}` : null}>{user?.firstName?.[0]}</Avatar>
+                                                        )}
+                                                    </Group>
+                                                ))}
+                                            </Stack>
 
-						<Tabs.Panel value="leaderboard" pt="md">
-							<Card shadow="sm" padding="lg" radius="md" withBorder>
-							<Group justify="space-between" mb="md"><Title order={3}>Hall of Fame</Title><SegmentedControl value={leaderboardType} onChange={setLeaderboardType} data={[{ label: 'Single Player', value:'single' }, { label: 'PVP Arena', value:'pvp' }]} /></Group>
-							<Table striped><Table.Thead><Table.Tr><Table.Th>Rank</Table.Th><Table.Th>Rapper</Table.Th><Table.Th>Wins</Table.Th></Table.Tr></Table.Thead>
-							<Table.Tbody>{leaderboard.map((player, index) => (<Table.Tr key={player.username}><Table.Td>#{index + 1}</Table.Td><Table.Td fw={700}>{player.username}</Table.Td><Table.Td>{player.score}</Table.Td></Table.Tr>))}</Table.Tbody></Table>
-							</Card>
-						</Tabs.Panel>
+                                            <Divider />
 
-						<Tabs.Panel value="profile" pt="md">
-							<Stack gap="xl">
-								<ProfileView
-									user={user}
-									stats={stats}
-									identity={identity}
-									onUpdateProfile={updateProfileLogic}
-									uploading={uploading}
-									avatarTs={avatarTs}
-								/>
-								
-								<Container size="sm" style={{ width: '100%' }}>
-									<Divider label={<Badge variant="outline">Full Battle History</Badge>} labelPosition="center" mb="lg" />
-									{history.length === 0 ? <Text c="dimmed" ta="center">No battles recorded yet.</Text> : (
-										<Stack gap="md">
-											{history.map((item) => <HistoryItem key={item.id} item={item} playAudio={playAudio} />)}
-										</Stack>
-									)}
-									{history.length > 0 && <Center mt="md"><Button variant="subtle" color="red" onClick={clearHistory}>Clear History</Button></Center>}
-								</Container>
-							</Stack>
-						</Tabs.Panel>
-					</Tabs>
-				</SignedIn>
+                                            {isMyTurn ? (
+                                                <Stack>
+                                                    {battleMode === 'audio' ? (
+                                                        <Group justify="center">
+                                                            {!recordedBlob ? (
+                                                                <Button 
+                                                                    size="xl" color={isRecording ? 'red' : 'blue'} 
+                                                                    radius="xl" style={{ flex: 1 }}
+                                                                    leftSection={isRecording ? <IconMicrophoneOff/> : <IconMicrophone/>}
+                                                                    onClick={isRecording ? stopRecording : startRecording}
+                                                                >
+                                                                    {isRecording ? `Recording (${30 - timeLeft}s)...` : "Hold to Record"}
+                                                                </Button>
+                                                            ) : (
+                                                                <Group style={{ flex: 1 }}>
+                                                                    <Button color="red" variant="subtle" onClick={() => setRecordedBlob(null)}>Retry</Button>
+                                                                    <Button color="green" flex={1} size="lg" rightSection={<IconSend size={18}/>} onClick={() => submitTurn("(Audio Verse)")}>Send Audio</Button>
+                                                                </Group>
+                                                            )}
+                                                        </Group>
+                                                    ) : (
+                                                        <Group align="end">
+                                                            <Textarea 
+                                                                placeholder={`You have ${timeLeft}s to spit bars...`}
+                                                                minRows={2} style={{ flex: 1 }}
+                                                                value={input}
+                                                                onChange={(e) => {
+                                                                    setInput(e.currentTarget.value);
+                                                                    if (ws.current) ws.current.send(JSON.stringify({ type: 'TYPING' }));
+                                                                }}
+                                                                onKeyDown={(e) => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitTurn(); }}}
+                                                            />
+                                                            <ActionIcon size="xl" radius="md" variant="gradient" gradient={{ from: 'blue', to: 'indigo' }} onClick={() => submitTurn()}>
+                                                                <IconSend size={24} />
+                                                            </ActionIcon>
+                                                        </Group>
+                                                    )}
+                                                </Stack>
+                                            ) : (
+                                                <Card bg="gray.0" p="sm" radius="md">
+                                                    <Group justify="center">
+                                                        <Loader size="sm" type="dots" />
+                                                        <Text c="dimmed" size="sm">
+                                                            {isOpponentTyping ? "Opponent is writing..." : "Opponent is thinking..."}
+                                                        </Text>
+                                                    </Group>
+                                                </Card>
+                                            )}
+                                        </Stack>
+                                    </Card>
+                                )}
 
-				{mode === 'result' && !user && duelResult && (
-					<Card shadow="sm" padding="xl" withBorder mt="xl"><Stack align="center"><Badge color="red">REPLAY MODE</Badge><Title order={2}>Winner: {duelResult.winner}</Title>
-					<Grid style={{ width: '100%' }} gutter="lg"><Grid.Col span={6}><Card bg="blue.1" padding="sm" radius="md"><Text size="xs" fw={700} c="dimmed">PLAYER 1</Text><Text size="sm" style={{ fontStyle: 'italic' }}>"{duelResult.p1_verse}"</Text></Card></Grid.Col><Grid.Col span={6}><Card bg="red.1" padding="sm" radius="md"><Text size="xs" fw={700} c="dimmed">PLAYER 2</Text><Text size="sm" style={{ fontStyle: 'italic' }}>"{duelResult.p2_verse}"</Text></Card></Grid.Col></Grid>
-					<Text c="dimmed" mt="md" ta="center">"{duelResult.scores.comment}"</Text><Button variant="light" leftSection={<IconShare size={16}/>} onClick={shareReplay}>Share This Replay</Button></Stack></Card>
-				)}
+                                {mode === 'result' && duelResult && (
+                                    <Card shadow="sm" padding="xl" withBorder>
+                                        <Stack align="center"><Title order={2}>Winner: {duelResult.winner}</Title>
+                                        <Grid style={{ width: '100%' }} gutter="lg"><Grid.Col span={6}><Card bg="blue.1" padding="sm" radius="md"><Text size="xs" fw={700} c="dimmed">PLAYER 1</Text><Text size="sm" style={{ fontStyle: 'italic', whiteSpace: 'pre-line' }}>"{duelResult.p1_verse}"</Text></Card></Grid.Col><Grid.Col span={6}><Card bg="red.1" padding="sm" radius="md"><Text size="xs" fw={700} c="dimmed">PLAYER 2</Text><Text size="sm" style={{ fontStyle: 'italic', whiteSpace: 'pre-line' }}>"{duelResult.p2_verse}"</Text></Card></Grid.Col></Grid>
+                                        <Group gap="xl" mt="md"><Stack align="center"><Text fw={700}>P1 Score</Text><Badge size="xl" color={duelResult.winnerCode === 'p1_win' ? 'green' : 'grey'}>{duelResult.scores.p1_score}</Badge></Stack><Title order={3}>VS</Title><Stack align="center"><Text fw={700}>P2 Score</Text><Badge size="xl" color={duelResult.winnerCode === 'p2_win' ? 'green' : 'gray'}>{duelResult.scores.p2_score}</Badge></Stack></Group>
+                                        <Text c="dimmed" mt="md" ta="center">"{duelResult.scores.comment}"</Text><Button mt="lg" onClick={() => { setMode("menu"); setInput(''); }}>Back to Menu</Button>
+                                        {window.location.search.includes('replay') && (<Button variant="light" leftSection={<IconShare size={16}/>} onClick={shareReplay}>Share Replay</Button>)}
+                                        </Stack>
+                                    </Card>
+                                )}
+                            </Tabs.Panel>
 
-			</Stack>
-		</Container>
-	);
+                            {/* --- 5. LEADERBOARD TAB --- */}
+                            <Tabs.Panel value="leaderboard" pt="md">
+                                <Card shadow="sm" padding="lg" radius="md" withBorder>
+                                <Group justify="space-between" mb="md"><Title order={3}>Hall of Fame</Title><SegmentedControl value={leaderboardType} onChange={setLeaderboardType} data={[{ label: 'Single Player', value:'single' }, { label: 'PVP Arena', value:'pvp' }]} /></Group>
+                                <Table striped><Table.Thead><Table.Tr><Table.Th>Rank</Table.Th><Table.Th>Rapper</Table.Th><Table.Th>Wins</Table.Th></Table.Tr></Table.Thead>
+                                <Table.Tbody>{leaderboard.map((player, index) => (<Table.Tr key={player.username}><Table.Td>#{index + 1}</Table.Td><Table.Td fw={700}>{player.username}</Table.Td><Table.Td>{player.score}</Table.Td></Table.Tr>))}</Table.Tbody></Table>
+                                </Card>
+                            </Tabs.Panel>
+
+                            {/* --- 6. PROFILE TAB --- */}
+                            <Tabs.Panel value="profile" pt="md">
+                                <Stack gap="xl">
+                                    <ProfileView
+                                        user={user}
+                                        stats={stats}
+                                        identity={identity}
+                                        onUpdateProfile={updateProfileLogic}
+                                        uploading={uploading}
+                                        avatarTs={avatarTs}
+                                    />
+                                    
+                                    <Container size="sm" style={{ width: '100%' }}>
+                                        <Divider label={<Badge variant="outline">Full Battle History</Badge>} labelPosition="center" mb="lg" />
+                                        {history.length === 0 ? <Text c="dimmed" ta="center">No battles recorded yet.</Text> : (
+                                            <Stack gap="md">
+                                                {history.map((item) => <HistoryItem key={item.id} item={item} playAudio={playAudio} />)}
+                                            </Stack>
+                                        )}
+                                        {history.length > 0 && <Center mt="md"><Button variant="subtle" color="red" onClick={clearHistory}>Clear History</Button></Center>}
+                                    </Container>
+                                </Stack>
+                            </Tabs.Panel>
+                        </Tabs>
+                    </Stack>
+                </Container>
+            </SignedIn>
+        </>
+    );
 }
 
 export default function App() {
