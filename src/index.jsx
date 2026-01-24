@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { createClerkClient } from '@clerk/backend';
 import { UserProfile } from './UserProfile';
 import { Leaderboard } from './Leaderboard';
 import { Challenge } from './Challenge';
@@ -26,17 +27,35 @@ const OPPONENTS = {
     }
 };
 
-// 1. BATTLE ROUTE (Single Player)
+// --- 1. SINGLE PLAYER BATTLE ROUTE (SECURED) ---
 app.post('/battle', async (c) => {
-    let userRap = "";
-    let username = c.req.header('X-Username') || 'guest';
-    const body = await c.req.json();
+    // 1. Verify Auth Token
+    const authHeader = c.req.header('Authorization');
+    if (!authHeader) {
+        return c.json({ error: "Missing Authorization Header" }, 401);
+    }
+
+    const token = authHeader.split(' ')[1];
     
-    userRap = body.userRap || 'freestyle';
+    // Initialize Clerk with the secret from environment variables
+    const clerk = createClerkClient({ secretKey: c.env.CLERK_SECRET_KEY });
+
+    let userId;
+    try {
+        const { payload } = await clerk.verifyToken(token);
+        userId = payload.sub; 
+    } catch (e) {
+        console.error("Auth Error", e);
+        return c.json({ error: "Invalid or Expired Token" }, 401);
+    }
+
+    // 2. Process Request
+    const body = await c.req.json();
+    const userRap = body.userRap || 'freestyle';
     const opponentID = body.opponent || 'roboflow';
     const opponentConfig = OPPONENTS[opponentID] || OPPONENTS['roboflow'];
     
-    // AI Rapper
+    // 3. AI Rapper Generation
     const rapperRes = await c.env.AI.run('@cf/meta/llama-3-8b-instruct', {
         messages: [
             { role : 'system', content: opponentConfig.system },
@@ -45,7 +64,7 @@ app.post('/battle', async (c) => {
     });
     const aiVerse = rapperRes.response;
 
-    // AI Judge (FIX: Stricter Prompt to prevent JSON crashes)
+    // 4. AI Judge
     const judgeRes = await c.env.AI.run('@cf/meta/llama-3-8b-instruct', {
         messages: [
             { 
@@ -90,38 +109,37 @@ app.post('/battle', async (c) => {
 
     const result = scores.user.total > scores.ai.total ? "win" : "loss";
     
-    // FIX: Update DB AND Leaderboard
-    if (username !== 'guest') {
-        try {
-            const id = c.env.USER_PROFILE.idFromName(username);
-            const stub = c.env.USER_PROFILE.get(id);
+    // 5. Update Stats (Durable Objects) using Clerk User ID
+    try {
+        const id = c.env.USER_PROFILE.idFromName(userId); // Use userId instead of username
+        const stub = c.env.USER_PROFILE.get(id);
+        
+        // Update Personal Stats
+        const userUpdateRes = await stub.fetch('http://do/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ result: result, type: 'ai' }) // Explicitly type as AI battle
+        });
+        const userData = await userUpdateRes.json();
+        
+        if (result === 'win' && userData.wins_against_ai) {
+            const lbId = c.env.LEADERBOARD.idFromName("GLOBAL");
+            const lbStub = c.env.LEADERBOARD.get(lbId);
             
-            // 1. Update Personal Stats
-            const userUpdateRes = await stub.fetch('http://do/update', {
+            await lbStub.fetch('http://do/submit', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ result: result })
+                body: JSON.stringify({ username: userId, wins: userData.wins_against_ai })
             });
-            const userData = await userUpdateRes.json();
-
-            // 2. Update Global Leaderboard
-            if (result === 'win' && userData.wins) {
-                const lbId = c.env.LEADERBOARD.idFromName("GLOBAL");
-                const lbStub = c.env.LEADERBOARD.get(lbId);
-                await lbStub.fetch('http://do/submit', {
-                    method: 'POST',
-                    body: JSON.stringify({ username, wins: userData.wins })
-                });
-            }
-
-        } catch (e) {
-            console.error('Failed to update stats', e);
         }
+
+    } catch (e) {
+        console.error('Failed to update stats', e);
     }
 
     return c.json({ userRap, aiVerse, result, scores, opponent: opponentConfig.name });
 });
 
+// --- 2. TRANSCRIPTION ---
 app.post('/transcribe', async (c) => {
     const audioData = await c.req.arrayBuffer();
     if (!audioData || audioData.byteLength === 0) {
@@ -133,15 +151,17 @@ app.post('/transcribe', async (c) => {
     return c.json({ text: response.text });
 });
 
-app.get('/profile/:username', async (c) => {
-    const username = c.req.param('username');
-    const id = c.env.USER_PROFILE.idFromName(username);
+// --- 3. GET PROFILE ---
+app.get('/profile/:userId', async (c) => {
+    const userId = c.req.param('userId');
+    const id = c.env.USER_PROFILE.idFromName(userId);
     const obj = c.env.USER_PROFILE.get(id);
     const response = await obj.fetch('http://do/stats');
     const stats = await response.json();
-    return c.json({ user: username, data: stats });
+    return c.json({ user: userId, data: stats });
 });
 
+// --- 4. TTS (SPEAK) ---
 app.post('/speak', async (c) => {
     const { text } = await c.req.json();
     try {
@@ -168,7 +188,9 @@ app.post('/speak', async (c) => {
     }
 });
 
-// CREATE CHALLENGE (P1)
+// --- 5. MULTIPLAYER CHALLENGE HELPERS ---
+// (Note: Most logic is now handled via WebSocket in Challenge.js)
+
 app.post('/challenge/create', async (c) => {
     const { username, verse } = await c.req.json();
 
@@ -185,7 +207,6 @@ app.post('/challenge/create', async (c) => {
     return c.json({ battleId: hexId });
 })
 
-// GET
 app.get('/challenge/:id', async (c) => {
     const hexId = c.req.param('id');
     try {
@@ -199,55 +220,7 @@ app.get('/challenge/:id', async (c) => {
     }
 })
 
-// REPLY TO CHALLENGE (P2 submits)
-app.post('/challenge/:id/reply', async (c) => {
-    const hexId = c.req.param('id');
-    const { username, verse } = await c.req.json();
-    const id = c.env.CHALLENGE.idFromString(hexId);
-    const stub = c.env.CHALLENGE.get(id);
-
-    // SAVE P2 VERSE
-    const joinRes = await stub.fetch('http://do/join', {
-        method: 'POST',
-        body: JSON.stringify({ username, verse })
-    });
-
-    if (!joinRes.ok) return c.json({ error: "Cannot join battle"}, 400);
-    const battleState = await joinRes.json();
-
-    // AI JUDGE (P1 vs P2)
-    const judgeRes = await c.env.AI.run('@cf/meta/llama-3-8b-instruct', {
-        messages: [
-            {
-                role: 'system',
-                content: `Judge this rap battle between ${battleState.p1.name} and ${battleState.p2.name}. 
-                Output JSON only: { "p1_score": 5, "p2_score": 5, "comment": "..." }`
-            },
-            { 
-                role: 'user', 
-                content: `${battleState.p1.name}: "${battleState.p1.verse}"\n${battleState.p2.name}: "${battleState.p2.verse}"` 
-            },
-        ],
-    });
-
-    let resultData = { p1_score: 0, p2_score: 0, comment: "Error" };
-    try {
-        const match = judgeRes.response.match(/\{[\s\S]*\}/);
-        if (match) resultData = JSON.parse(match[0]);
-    } catch (e) {
-        console.error("Judge Error", e);
-    }
-
-    const winner = resultData.p1_score > resultData.p2_score ? 'p1_win' : 'p2_win';
-
-    await stub.fetch('http://do/finish', {
-        method: 'POST',
-        body: JSON.stringify({ result: winner, scores: resultData })
-    });
-
-    return c.json({ winner, scores: resultData });
-})
-
+// --- 6. LEADERBOARDS ---
 app.get('/leaderboard', async (c) => {
     try {
         const id = c.env.LEADERBOARD.idFromName("GLOBAL");
@@ -275,48 +248,49 @@ app.get('/leaderboard/pvp', async (c) => {
     }
 })
 
-
-// WEBSOCKET ROUTE
+// --- 7. WEBSOCKET ROUTE ---
 app.get('/ws/battle/:id', async (c) => {
-	const upgradeHeader = c.req.header('Upgrade');
-	if (!upgradeHeader || upgradeHeader !== 'websocket') {
-		return c.text('Expected Upgrade: websocket', 426);
-	}
+    const upgradeHeader = c.req.header('Upgrade');
+    if (!upgradeHeader || upgradeHeader !== 'websocket') {
+        return c.text('Expected Upgrade: websocket', 426);
+    }
 
-	const idStr = c.req.param('id');
+    const idStr = c.req.param('id');
 
-	let id;
-	try {
-		id = c.env.CHALLENGE.idFromName(idStr);
-	} catch {
-		id = c.env.CHALLENGE.newUniqueId();
-	}
+    let id;
+    try {
+        id = c.env.CHALLENGE.idFromName(idStr);
+    } catch {
+        id = c.env.CHALLENGE.newUniqueId();
+    }
 
-	const stub = c.env.CHALLENGE.get(id);
-	return stub.fetch(c.req.raw);
+    const stub = c.env.CHALLENGE.get(id);
+    return stub.fetch(c.req.raw);
 })
 
+// --- 8. REPLAY (D1 DATABASE) ---
 app.get('/replay/:id', async (c) => {
-	const id = c.req.param('id')
+    const id = c.req.param('id')
 
-	if (!c.env.DB) {
-		return c.json({ error: 'Database not configured =' }, 500);
-	}
+    if (!c.env.DB) {
+        return c.json({ error: 'Database not configured' }, 500);
+    }
 
-	try {
-		// fetch battle from D1
-		const result = await c.env.DB.prepare('SELECT * FROM battles WHERE id=?')
-			.bind(id)
-			.first();
+    try {
+        // Fetch battle from D1
+        const result = await c.env.DB.prepare('SELECT * FROM battles WHERE id=?')
+            .bind(id)
+            .first();
 
-		if (!result) {
-			return c.json({ error: "Battle not found" }, 404);
-		}
+        if (!result) {
+            return c.json({ error: "Battle not found" }, 404);
+        }
 
-		return c.json(result);
-	} catch (e) {
-		return c.json({ error: 'Database error' }, 500);ß
-	}
+        return c.json(result);
+    } catch (e) {
+        console.error("D1 Error", e);
+        return c.json({ error: 'Database error' }, 500);
+    }
 });
 
 export default app;
