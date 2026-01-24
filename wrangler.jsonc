@@ -54,7 +54,7 @@
 	],
 	"d1_databases": [
 		{
-			"binding": "rap_battle_db",
+			"binding": "DB",
 			"database_name": "rap-battle-db",
 			"database_id": "52ff179e-73e9-4570-ad25-4f98a0cc6502"
 		}

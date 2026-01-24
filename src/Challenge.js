@@ -93,8 +93,8 @@ export class Challenge {
                     this.status = 'FINISHED';
                     this.finalResult = result;
 
-                    result.p1_verse = this.p1_verse;
-                    result.p2_verse = this.p2_verse;
+                    result.p1_verse = this.p1.verse;
+                    result.p2_verse = this.p2.verse;
                     result.p2_audio = this.p2.audioData
 
                     const savedID = await this.saveBattleToDB(result);
@@ -137,8 +137,9 @@ export class Challenge {
             const winnerName = scores.p1_score > scores.p2_score ? p1.username : p2.username;
             const winnerCode = scores.p1_score > scores.p2_score ? 'p1_win' : 'p2_win'
 
-            return { winner: winnerName, winnderCode, scores } 
+            return { winner: winnerName, winnerCode, scores } 
         } catch (e) {
+            console.error("Judge Exception", e);
             return { winner: 'Draw', scores: { comment: "Judge Glitched", p1_score: 0, p2_score: 0 } };
         }
     }
@@ -192,6 +193,7 @@ export class Challenge {
                     this.p1.username,
                     this.p2.username,
                     this.p1.verse,
+                    this.p2.verse,
                     result.winner,
                     Date.now()
                 )
