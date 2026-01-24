@@ -1,37 +1,39 @@
-export class Leaderboard {
-    constructor(state, env) {
-        this.state = state;
+import { DurableObject } from 'cloudflare:workers';
+
+export class Leaderboard extends DurableObject {
+    constructor(ctx, env) {
+        super(ctx, env);
+        this.storage = ctx.storage;
     }
 
     async fetch(request) {
-        const headers = { 'Content-Type': 'application/json' };
+        const url = new URL(request.url);
 
-        if (request.method === 'GET') {
-            const scores = await this.state.storage.get("scores") || [];
-            return new Response(JSON.stringify(scores), { headers });
+        // --- SUBMIT SCORE ---
+        if (request.method === 'POST' && url.pathname === '/submit') {
+            const { username, score } = await request.json();
+            
+            // Get current list
+            let list = (await this.storage.get('leaders')) || [];
+            
+            // Remove existing entry for this user
+            list = list.filter(p => p.username !== username);
+            
+            // Add new entry
+            list.push({ username, score });
+            
+            // Sort by SCORE descending (Highest first)
+            list.sort((a, b) => b.score - a.score);
+            
+            // Keep Top 50
+            list = list.slice(0, 50);
+            
+            await this.storage.put('leaders', list);
+            return new Response(JSON.stringify(list));
         }
 
-        if (request.method === 'POST') {
-            const { username, wins } = await request.json();
-            let scores = await this.state.storage.get("scores") || [];
-
-            const index = scores.findIndex(s => s.username === username);
-            if (index !== -1) {
-                if (wins > scores[index].wins) scores[index].wins = wins;
-            } else {
-                scores.push({ username, wins });
-            }
-
-            scores.sort((a, b) => b.wins - a.wins);
-            scores = scores.slice(0, 10);
-
-            await this.state.storage.put("scores", scores);
-            return new Response(JSON.stringify(scores), { headers });
-        }
-
-        return new Response(JSON.stringify({ error: "Method not allowed" }), { 
-            status: 405, 
-            headers 
-        });
+        // --- GET LEADERBOARD ---
+        const list = (await this.storage.get('leaders')) || [];
+        return new Response(JSON.stringify(list));
     }
 }

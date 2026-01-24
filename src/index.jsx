@@ -106,10 +106,11 @@ app.post('/battle', async (c) => {
     try {
         const id = c.env.USER_PROFILE.idFromName(userId);
         const stub = c.env.USER_PROFILE.get(id);
+		const hasWordBonus = scores.user.word_bonus > 0;
         const userUpdateRes = await stub.fetch('http://do/update', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ result: result, type: 'ai' })
+            body: JSON.stringify({ result: result, type: 'ai', hasWordBonus: hasWordBonus })
         });
         const userData = await userUpdateRes.json();
         

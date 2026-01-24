@@ -16,33 +16,38 @@ app.get('/stats', async (c) => {
 		rank: 'Novice',
 		style: 'Freestyle',
 	};
-
-	// calc total wins
-	const totalWins = (stats.wins_against_ai || 0) + (stats.pvp_wins || 0);
-	const totalLosses = (stats.losses_against_ai || 0) + (stats.pvp_losses || 0);
-	const netLosses = totalWins - totalLosses;
-
-	let rank = 'Novice';
-	if (netLosses > 5) rank = 'Amateur';
-	if (netLosses > 20) rank = 'Pro';
-	if (netLosses > 50) rank = 'Rap God';
-	stats.rank = rank;
 	return c.json(stats);
 });
 
 app.post('/update', async (c) => {
 	const storage = c.env.storage;
-	const { result, type } = await c.req.json(); 
+	const { result, type, hasWordBonus } = await c.req.json(); 
 
-	let stats = (await storage.get('stats')) || { wins: 0, losses: 0, pvp_wins: 0, pvp_losses: 0 };
+	let stats = (await storage.get('stats')) || { wins: 0, losses: 0, score: 0, rank: 'Novice' };
 
-	if (type === 'pvp') {
-		if (result === 'win') stats.pvp_wins = (stats.pvp_wins || 0) + 1;
-		if (result === 'loss') stats.pvp_losses = (stats.pvp_losses || 0) + 1;
+	// 1. CALCULATE POINTS
+	let pointsChange = 0;
+
+	if (result === 'win') {
+		stats.win += 1;
+		// Base points
+		if (type === 'pvp') pointsChange += 25;
+		else pointsChange += 10;
+
+		// Bonus
+		if (hasWordBonus) pointsChange += 5;
 	} else {
-		if (result === 'win') stats.wins_against_ai = (stats.wins_against_ai || 0) + 1;
-		if (result === 'loss') stats.losses_against_ai = (stats.losses_against_ai || 0) + 1;
+		stats.losses += 1;
+		pointsChange -= 5;
 	}
+	
+	// 2. UPDATE SCORE
+	stats.score = Math.max(0, (stats.score || 0) + pointsChange);
+
+	// 3. UPDATE RANK
+	if (stats.score > 50) stats.rank = 'Amateur';
+    if (stats.score > 200) stats.rank = 'Pro';
+    if (stats.score > 1000) stats.rank = 'Rap God';
 
 	await storage.put('stats', stats);
 	return c.json(stats);

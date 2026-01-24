@@ -27,7 +27,7 @@ function RapBattleApp() {
     const [onboardingName, setOnboardingName] = useState(''); 
     const [onboardingFile, setOnboardingFile] = useState(null);
     
-    const [stats, setStats] = useState({ wins: 0, losses: 0, rank: 'Novice' });
+    const [stats, setStats] = useState({ wins: 0, losses: 0, score: 0, rank: 'Novice' });
     const [leaderboard, setLeaderboard] = useState([]);
     const [leaderboardType, setLeaderboardType] = useState('single');
 
@@ -529,7 +529,7 @@ function RapBattleApp() {
                     <Card shadow="sm" padding="lg" radius="md" withBorder>
                     <Group justify="space-between" mb="md"><Title order={3}>Hall of Fame</Title><SegmentedControl value={leaderboardType} onChange={setLeaderboardType} data={[{ label: 'Single Player', value:'single' }, { label: 'PVP Arena', value:'pvp' }]} /></Group>
                     <Table striped><Table.Thead><Table.Tr><Table.Th>Rank</Table.Th><Table.Th>Rapper</Table.Th><Table.Th>Wins</Table.Th></Table.Tr></Table.Thead>
-                    <Table.Tbody>{leaderboard.map((player, index) => (<Table.Tr key={player.username}><Table.Td>#{index + 1}</Table.Td><Table.Td fw={700}>{player.username}</Table.Td><Table.Td>{player.wins}</Table.Td></Table.Tr>))}</Table.Tbody></Table>
+                    <Table.Tbody>{leaderboard.map((player, index) => (<Table.Tr key={player.username}><Table.Td>#{index + 1}</Table.Td><Table.Td fw={700}>{player.username}</Table.Td><Table.Td>{player.score}</Table.Td></Table.Tr>))}</Table.Tbody></Table>
                     </Card>
                 </Tabs.Panel>
                 </Tabs>

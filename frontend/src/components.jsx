@@ -30,8 +30,8 @@ export const AppHeader = ({ user, isLoaded, identity, stats }) => (
                         </SignInButton>
                     </SignedOut>
                     <SignedIn>
-                        <Badge size="lg" variant="dot" color="green" radius="sm" style={{ background: 'transparent', border: 'none' }}>
-                            Rank: {stats.rank}
+                        <Badge size="lg" variant="dot" color="blue" radius="sm" style={{ background: 'transparent', border: 'none' }}>
+                            Rank: {stats.score}
                         </Badge>
                         <Divider orientation="vertical" />
                         <Badge size="lg" variant="transparent" color="blue">Wins: {stats.wins}</Badge>
