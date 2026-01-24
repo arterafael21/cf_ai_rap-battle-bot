@@ -97,6 +97,9 @@ export class Challenge {
                     result.p2_verse = this.p2_verse;
                     result.p2_audio = this.p2.audioData
 
+                    const savedID = await this.saveBattleToDB(result);
+                    result.battle_id = savedID;
+
                     this.broadcast({ type: 'RESULT', result});
 
                     // update PVP leaderboard
@@ -175,6 +178,8 @@ export class Challenge {
             return;
         }
 
+        const battleID = crypto.randomUUID();
+
         try {
             const query = `
                 INSERT INTO battles (id, p1_name, p2_name, p1_verse, p2_verse, winner, timestamp)
@@ -191,9 +196,10 @@ export class Challenge {
                     Date.now()
                 )
                 .run();
-            console.log('Battle saved to D1');
+            return battleID;
         } catch (e) {
             console.error('Failed to save battle to D1');
+            return null;
         }
     }
 }

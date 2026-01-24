@@ -21,12 +21,12 @@ import {
   Center,
   SegmentedControl,
   Switch,
-  rem
+  rem,
 } from '@mantine/core';
 import { 
     IconMicrophone, IconMicrophoneOff, IconSend, IconTrash, 
     IconPlayerPlay, IconTrophy, IconSwords, IconUsers, IconSearch, IconArrowLeft,
-    IconWorld, IconKeyboard
+    IconWorld, IconKeyboard,   IconShare
 } from '@tabler/icons-react';
 import '@mantine/core/styles.css'
 
@@ -348,43 +348,43 @@ function RapBattleApp() {
         }
 
         // CASE 4: THE END
-        if (msg.type === 'RESULT') {
-            setDuelResult(msg.result);
-            setMode('result');
+		if (msg.type === 'RESULT') {
+			setDuelResult(msg.result);
+			setMode('result');
 
-            if (timerRef.current) clearInterval(timerRef.current);
+			if (timerRef.current) clearInterval(timerRef.current);
 
-            if (battleMode === 'audio' && msg.result.p2_audio && username !== msg.result.winner) {
-                new Audio(msg.result.p2_audio).play()
-            } else if (battleMode === 'audio' && msg.result.p2_verse) {
-                playAudio(`p2-${Date.now()}`, msg.result.p2_verse, 'bytebeater');
-            }
+			if (battleMode === 'audio' && msg.result.p2_audio && username !== msg.result.winner) {
+				new Audio(msg.result.p2_audio).play()
+			} else if (battleMode === 'audio' && msg.result.p2_verse) {
+				playAudio(`p2-${Date.now()}`, msg.result.p2_verse, 'bytebeater');
+			}
 
-            if (msg.message) alert(msg.message);
-            
-            ws.current.close(); 
-        }
+			if (msg.message) alert(msg.message);
+			
+			ws.current.close(); 
+       	}
     };
 
-    socket.onerror = (e) => console.error("WS ERROR", e);
-  };
+		socket.onerror = (e) => console.error("WS ERROR", e);
+	};
 
-  const startTimer = () => {
-    setTimer(30);
-    if (timerRef.current) clearInterval(timerRef.current);
+	const startTimer = () => {
+		setTimer(30);
+		if (timerRef.current) clearInterval(timerRef.current);
 
-    timerRef.current = setInterval(() => {
-        setTimer((prev) => {
-            if (prev <= 1) {
-                clearInterval(timerRef.current);
-                return 0;
-            }
-            return prev - 1;
-        });
-    }, 1000);
-  }
+		timerRef.current = setInterval(() => {
+			setTimer((prev) => {
+				if (prev <= 1) {
+					clearInterval(timerRef.current);
+					return 0;
+				}
+				return prev - 1;
+			});
+		}, 1000);
+  	}
 
-  const sendWsReply = () => {
+	const sendWsReply = () => {
     if (!ws.current) return;
     let audioData = null;
 
@@ -399,6 +399,56 @@ function RapBattleApp() {
         audioData: audioData
     }));
   }
+
+	// REPLAY
+	// check for replay url
+	useEffect(() => {
+		const params = new URLSearchParams(window.location.search);
+		const replayId = params.get('replay');
+		if (replayId) {
+			loadReplay(replayId);
+		}
+	}, [])
+
+	const loadReplay = async (id) => {
+		setIsLoading(true);
+		setStatus('Loading Replay...');
+		try {
+			const res = await fetch(`/replay/${id}`);
+			const data = await res.json();
+
+			if (data.error) throw new Error(data.error);
+
+			setDuelResult({
+				winner: data.winner,
+				p1_verse: data.p1_verse,
+				p2_verse: data.p2_verse,
+				// placeholder for scores for now
+				scores: {
+					p1_score: '-',
+					p2_score: '-',
+					comment: 'Replay Mode - Scores hidden'
+				},
+				winnerCode: data.winner === data.p1_name ? 'p1_win' : 'p2_win'
+			});
+
+			setMode('result');
+		} catch (e) {
+			alert('Failed to laod replay' + e.message);
+		}
+	};
+
+	const shareReplay = () => {
+		let link = window.location.href;
+
+		if (duelResult && duelResult.battle_id) {
+			const baseUrl = window.location.origin + window.location.pathname;
+			link = `${baseUrl}?replay=${duelResult.battle_id}`;
+		}
+		navigator.clipboard.writeText(link);
+		alert("Replay link copied " + link);
+	};
+
 
     return (
     <Container size="sm" py="xl">
@@ -741,6 +791,15 @@ function RapBattleApp() {
 
                         <Text c="dimmed" mt="md" ta="center">"{duelResult.scores.comment}"</Text>
                         <Button mt="lg" onClick={() => { setMode("menu"); setInput(''); }}>Back to Menu</Button>
+						{window.location.search.includes('replay') && (
+							<Button 
+								variant="light" 
+								leftSection={<IconShare size={16}/>}
+								onClick={shareReplay}
+							>
+								Share Replay
+							</Button>
+						)}
                     </Stack>
                 </Card>
             )}

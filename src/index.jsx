@@ -296,5 +296,28 @@ app.get('/ws/battle/:id', async (c) => {
 	return stub.fetch(c.req.raw);
 })
 
+app.get('/replay/:id', async (c) => {
+	const id = c.req.param('id')
+
+	if (!c.env.DB) {
+		return c.json({ error: 'Database not configured =' }, 500);
+	}
+
+	try {
+		// fetch battle from D1
+		const result = await c.env.DB.prepare('SELECT * FROM battles WHERE id=?')
+			.bind(id)
+			.first();
+
+		if (!result) {
+			return c.json({ error: "Battle not found" }, 404);
+		}
+
+		return c.json(result);
+	} catch (e) {
+		return c.json({ error: 'Database error' }, 500);ß
+	}
+});
+
 export default app;
 export { UserProfile, Leaderboard, Challenge };
