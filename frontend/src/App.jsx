@@ -10,7 +10,7 @@ import { ClerkProvider, SignedIn, SignedOut, useUser, useAuth, useClerk } from "
 
 // IMPORTS
 import { getRandomWord } from '../../src/constants';
-import { AppHeader, WordDisplay, OpponentSelector, BattleInputArea, HistoryItem, OnboardingFlow, ProfileView } from './components';
+import { AppHeader, WordDisplay, OpponentSelector, BattleInputArea, HistoryItem, OnboardingFlow, ProfileView, SplashPage } from './components';
 
 const CLERK_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 if (!CLERK_KEY) throw new Error("Missing Publishable Key");
@@ -559,15 +559,7 @@ function RapBattleApp() {
                 />
 
 				<SignedOut>
-					{mode === 'result' ? null : (
-						<Card withBorder padding="xl" radius="md">
-							<Stack align="center">
-								<IconTrophy size={48} color="gray"/>
-								<Title order={3}>Welcome to the Arena</Title>
-								<Text>Sign in to start battling AI or friends!</Text>
-							</Stack>
-						</Card>
-					)}
+					<SplashPage />
 				</SignedOut>
 
 				<SignedIn>

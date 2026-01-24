@@ -4,9 +4,11 @@ import {
     Divider, FileButton, TextInput, Switch, Container, Menu, Avatar
 } from '@mantine/core';
 import { 
-    IconMicrophone, IconMicrophoneOff, IconSend, IconPlayerPlay, IconBulb, IconRefresh, IconUser, IconCamera, IconCheck, IconEdit, IconTrophy, IconChartBar, IconSwords, IconId, IconLogout
+    IconMicrophone, IconMicrophoneOff, IconSend, IconPlayerPlay, IconBulb, IconRefresh, 
+    IconUser, IconCamera, IconCheck, IconEdit, IconTrophy, IconChartBar, IconSwords, 
+    IconId, IconLogout, IconFlame, IconUsers
 } from '@tabler/icons-react';
-import { SignedIn, SignedOut, SignInButton, UserButton } from "@clerk/clerk-react";
+import { SignedIn, SignedOut, SignInButton } from "@clerk/clerk-react";
 import { OPPONENTS } from '../../src/constants';
 
 // --- SUB-COMPONENTS ---
@@ -16,24 +18,10 @@ export const AppHeader = ({ user, isLoaded, identity, stats, avatarTs, onLogout 
 
     return (
         <Stack align="center" gap="xl" mb={30} mt="lg">
-            <Stack gap={0} align="center">
-                <Title order={1} size={48} fw={900} variant="gradient" gradient={{ from: 'blue', to: 'cyan', deg: 90 }} style={{ letterSpacing: '-1px' }}>
-                    RAP BATTLE BOT
-                </Title>
-                <Text c="dimmed" fw={500} size="lg">
-                    {!isLoaded ? "Loading..." : (identity?.mc_name ? identity.mc_name : `MC ${user?.firstName || 'Guest'}`)}
-                </Text>
-            </Stack>
             <Group gap="md" p={6} bg="gray.0" style={{ borderRadius: '50px', border: '1px solid #e9ecef', paddingRight: 12 }}>
                 {!isLoaded ? null : (
                     <>
-                        <SignedOut>
-                            <SignInButton mode="modal">
-                                <Button radius="xl" variant="gradient" gradient={{ from: 'blue', to: 'cyan' }}>Sign In to Battle</Button>
-                            </SignInButton>
-                        </SignedOut>
                         <SignedIn>
-                            {/* DROPDOWN MENU FOR AVATAR */}
                             <Menu shadow="md" width={200} position="bottom-end">
                                 <Menu.Target>
                                     <Avatar 
@@ -50,7 +38,7 @@ export const AppHeader = ({ user, isLoaded, identity, stats, avatarTs, onLogout 
                                 <Menu.Dropdown>
                                     <Menu.Label>My Account</Menu.Label>
                                     <Menu.Item leftSection={<IconUser size={14} />}>
-                                        Signed in as {identity?.mc_name || user.firstName}
+                                        Signed in as {identity?.mc_name || user?.firstName}
                                     </Menu.Item>
                                     <Divider />
                                     <Menu.Item 
@@ -77,13 +65,11 @@ export const AppHeader = ({ user, isLoaded, identity, stats, avatarTs, onLogout 
 };
 
 export const WordDisplay = ({ word, onRefresh }) => (
-    // ADDED: mx="auto" to center the card horizontally
     <Card bg="yellow.1" radius="md" p="xs" mb="md" withBorder style={{ borderColor: '#fcc419', width: 'fit-content' }} mx="auto">
         <Group justify="center" gap="xs">
             <IconBulb size={20} color="orange" />
             <Text fw={700} c="orange.9" size="sm">WORD OF THE ROUND:</Text>
             <Badge size="lg" color="orange" variant="filled">{word}</Badge>
-            {/* Show refresh button only if onRefresh is provided */}
             {onRefresh && (
                 <ActionIcon variant="transparent" color="orange" onClick={onRefresh} title="Get new word">
                     <IconRefresh size={16} />
@@ -187,7 +173,6 @@ export const OnboardingFlow = ({ name, setName, setFile, onSubmit, loading }) =>
         <Container size="xs" py="xl" style={{ height: '100vh', display: 'flex', alignItems: 'center' }}>
             <Card shadow="xl" padding="xl" radius="lg" withBorder style={{ width: '100%' }}>
                 <Stack gap="xl">
-                    {/* PROGRESS INDICATOR */}
                     <Group justify="center" gap="xs">
                         {[0, 1, 2].map(i => (
                             <div key={i} style={{ 
@@ -197,7 +182,6 @@ export const OnboardingFlow = ({ name, setName, setFile, onSubmit, loading }) =>
                         ))}
                     </Group>
 
-                    {/* STEP 0: WELCOME */}
                     {step === 0 && (
                         <Stack align="center" gap="lg" py="lg">
                             <IconMicrophone size={64} color="#228be6" />
@@ -212,7 +196,6 @@ export const OnboardingFlow = ({ name, setName, setFile, onSubmit, loading }) =>
                         </Stack>
                     )}
 
-                    {/* STEP 1: NAME */}
                     {step === 1 && (
                         <Stack align="center" gap="lg" py="lg">
                             <Title order={3}>What's your MC Name?</Title>
@@ -224,17 +207,12 @@ export const OnboardingFlow = ({ name, setName, setFile, onSubmit, loading }) =>
                                 onChange={(e) => setName(e.currentTarget.value)}
                                 leftSection={<IconUser size={18} />}
                             />
-                            <Button 
-                                fullWidth size="md" 
-                                onClick={nextStep} 
-                                disabled={!name}
-                            >
+                            <Button fullWidth size="md" onClick={nextStep} disabled={!name}>
                                 Next
                             </Button>
                         </Stack>
                     )}
 
-                    {/* STEP 2: PHOTO */}
                     {step === 2 && (
                         <Stack align="center" gap="lg" py="lg">
                             <Title order={3}>Got a look?</Title>
@@ -245,14 +223,7 @@ export const OnboardingFlow = ({ name, setName, setFile, onSubmit, loading }) =>
                             
                             <FileButton onChange={handleFile} accept="image/png,image/jpeg">
                                 {(props) => (
-                                    <Button 
-                                        {...props} 
-                                        variant="outline" 
-                                        size="xl" 
-                                        h={120} 
-                                        fullWidth
-                                        style={{ borderStyle: 'dashed' }}
-                                    >
+                                    <Button {...props} variant="outline" size="xl" h={120} fullWidth style={{ borderStyle: 'dashed' }}>
                                         <Stack align="center" gap={5}>
                                             <IconCamera size={32} />
                                             <Text>{localFile ? localFile.name : "Upload Photo (Optional)"}</Text>
@@ -261,15 +232,7 @@ export const OnboardingFlow = ({ name, setName, setFile, onSubmit, loading }) =>
                                 )}
                             </FileButton>
 
-                            <Button 
-                                fullWidth 
-                                size="md" 
-                                onClick={onSubmit} 
-                                loading={loading}
-                                variant="gradient" 
-                                gradient={{ from: 'orange', to: 'red' }}
-                                leftSection={<IconCheck size={20} />}
-                            >
+                            <Button fullWidth size="md" onClick={onSubmit} loading={loading} variant="gradient" gradient={{ from: 'orange', to: 'red' }} leftSection={<IconCheck size={20} />}>
                                 Enter the Arena
                             </Button>
                         </Stack>
@@ -286,10 +249,7 @@ export const ProfileView = ({ user, stats, identity, onUpdateProfile, uploading,
     const [newFile, setNewFile] = React.useState(null);
     const [preview, setPreview] = React.useState(null);
 
-    // Force image refresh cache buster
-    const avatarUrl = user ? `/avatar/${user.id}?t=${Date.now()}` : null;
-
-    // Calculate Win Rate
+    const avatarUrl = user ? `/avatar/${user.id}?t=${avatarTs}` : null;
     const totalBattles = (stats.wins || 0) + (stats.losses || 0);
     const winRate = totalBattles > 0 ? Math.round((stats.wins / totalBattles) * 100) : 0;
 
@@ -304,9 +264,9 @@ export const ProfileView = ({ user, stats, identity, onUpdateProfile, uploading,
         try {
             await onUpdateProfile(newName, newFile);
             setIsEditing(false);
+            if (!newFile) setPreview(null);
             setNewFile(null);
-            setPreview(null);
-        } catch(e) {console.error("Error saving image:", e)}
+        } catch(e) {}
     };
 
     const toggleEdit = () => {
@@ -320,8 +280,6 @@ export const ProfileView = ({ user, stats, identity, onUpdateProfile, uploading,
     return (
         <Container size="sm">
             <Stack gap="lg">
-                
-                {/* 1. HEADER CARD (Avatar & Name) */}
                 <Card padding="xl" radius="lg" withBorder shadow="sm">
                     <Group justify="space-between" align="start">
                         <Group>
@@ -332,40 +290,29 @@ export const ProfileView = ({ user, stats, identity, onUpdateProfile, uploading,
                                         if (!preview) { e.target.onerror = null; e.target.src = user.imageUrl; }
                                     }} 
                                     alt="Profile" 
-                                    style={{ 
-                                        width: 100, height: 100, borderRadius: '50%', 
-                                        border: '4px solid #228be6', objectFit: 'cover' 
-                                    }} 
+                                    style={{ width: 100, height: 100, borderRadius: '50%', border: '4px solid #228be6', objectFit: 'cover' }} 
                                 />
                                 <Badge circle size="lg" color="blue" style={{ position: 'absolute', bottom: 10, right: 3 }}>
                                     {stats.rank?.charAt(0) || 'N'}
                                 </Badge>
                             </div>
-                            
                             <Stack gap={0}>
                                 <Title order={2}>{identity?.mc_name || "Unknown MC"}</Title>
                                 <Text c="dimmed">Rank: {stats.rank || "Novice"}</Text>
                                 <Text size="xs" c="dimmed">Joined: {new Date(user.createdAt).toLocaleDateString()}</Text>
                             </Stack>
                         </Group>
-                        
                         <Button variant="light" leftSection={<IconEdit size={16} />} onClick={toggleEdit}>
                             {isEditing ? "Cancel" : "Edit Profile"}
                         </Button>
                     </Group>
-
-                    {/* EDIT AREA (Shows up inside Header when editing) */}
                     {isEditing && (
                         <Card bg="gray.0" mt="md" radius="md" withBorder>
                             <Stack>
                                 <TextInput label="Update MC Name" value={newName} onChange={(e) => setNewName(e.currentTarget.value)} />
                                 <Group align="end">
                                     <FileButton onChange={handleFileChange} accept="image/png,image/jpeg">
-                                        {(props) => (
-                                            <Button {...props} variant="default" leftSection={<IconCamera size={16}/>}>
-                                                {newFile ? "Change Photo" : "Upload New Photo"}
-                                            </Button>
-                                        )}
+                                        {(props) => <Button {...props} variant="default" leftSection={<IconCamera size={16}/>}>{newFile ? "Change Photo" : "Upload New Photo"}</Button>}
                                     </FileButton>
                                     {newFile && <Text size="sm" c="blue">{newFile.name}</Text>}
                                 </Group>
@@ -374,49 +321,64 @@ export const ProfileView = ({ user, stats, identity, onUpdateProfile, uploading,
                         </Card>
                     )}
                 </Card>
-
-                {/* 2. STATS GRID */}
                 <Grid>
-                    <Grid.Col span={4}>
-                        <Card withBorder radius="md" padding="lg" ta="center">
-                            <Text size="xs" tt="uppercase" fw={700} c="dimmed">Score</Text>
-                            <Title order={2}>{stats.score || 0}</Title>
-                            <IconTrophy size={24} color="gold" style={{ marginTop: 8 }} />
-                        </Card>
-                    </Grid.Col>
-                    <Grid.Col span={4}>
-                        <Card withBorder radius="md" padding="lg" ta="center">
-                            <Text size="xs" tt="uppercase" fw={700} c="dimmed">Win Rate</Text>
-                            <Title order={2}>{winRate}%</Title>
-                            <IconChartBar size={24} color="blue" style={{ marginTop: 8 }} />
-                        </Card>
-                    </Grid.Col>
-                    <Grid.Col span={4}>
-                        <Card withBorder radius="md" padding="lg" ta="center">
-                            <Text size="xs" tt="uppercase" fw={700} c="dimmed">Battles</Text>
-                            <Title order={2}>{totalBattles}</Title>
-                            <IconSwords size={24} color="red" style={{ marginTop: 8 }} />
-                        </Card>
-                    </Grid.Col>
+                    <Grid.Col span={4}><Card withBorder radius="md" padding="lg" ta="center"><Text size="xs" tt="uppercase" fw={700} c="dimmed">Score</Text><Title order={2}>{stats.score || 0}</Title><IconTrophy size={24} color="gold" style={{ marginTop: 8 }} /></Card></Grid.Col>
+                    <Grid.Col span={4}><Card withBorder radius="md" padding="lg" ta="center"><Text size="xs" tt="uppercase" fw={700} c="dimmed">Win Rate</Text><Title order={2}>{winRate}%</Title><IconChartBar size={24} color="blue" style={{ marginTop: 8 }} /></Card></Grid.Col>
+                    <Grid.Col span={4}><Card withBorder radius="md" padding="lg" ta="center"><Text size="xs" tt="uppercase" fw={700} c="dimmed">Battles</Text><Title order={2}>{totalBattles}</Title><IconSwords size={24} color="red" style={{ marginTop: 8 }} /></Card></Grid.Col>
                 </Grid>
-
-                {/* 3. AI ANALYSIS */}
                 <Card withBorder radius="lg" padding="lg">
-                    <Group mb="sm">
-                        <IconId color="gray" />
-                        <Title order={4}>AI Persona Analysis</Title>
-                    </Group>
-                    <Card bg="gray.1" radius="md" p="md">
-                        <Text size="sm" style={{ fontStyle: 'italic' }}>
-                            {(!identity?.roast_context || identity.roast_context === 'No photo provided') 
-                                ? "No photo uploaded. The AI doesn't know what you look like (and will roast you for it)." 
-                                : `"${identity.roast_context}"`
-                            }
-                        </Text>
-                    </Card>
+                    <Group mb="sm"><IconId color="gray" /><Title order={4}>AI Persona Analysis</Title></Group>
+                    <Card bg="gray.1" radius="md" p="md"><Text size="sm" style={{ fontStyle: 'italic' }}>{(!identity?.roast_context || identity.roast_context === 'No photo provided') ? "No photo uploaded. The AI doesn't know what you look like." : `"${identity.roast_context}"`}</Text></Card>
                 </Card>
-
             </Stack>
         </Container>
     );
 };
+
+// --- SPLASH PAGE ---
+export const SplashPage = () => (
+    <Container size="xs" h="100vh" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
+        <Card shadow="xl" padding="xl" radius="lg" withBorder style={{ overflow: 'visible' }}>
+            {/* DECORATIVE ICON */}
+            <div style={{ 
+                position: 'absolute', top: -40, left: '50%', transform: 'translateX(-50%)',
+                background: 'linear-gradient(45deg, #228be6, #15aabf)', padding: 20, borderRadius: '50%',
+                boxShadow: '0 10px 20px rgba(0,0,0,0.1)'
+            }}>
+                <IconSwords size={48} color="white" />
+            </div>
+
+            <Stack align="center" mt="xl" gap="lg">
+                <Title order={1} size={48} fw={900} ta="center" variant="gradient" gradient={{ from: 'blue', to: 'cyan', deg: 90 }} style={{ letterSpacing: '-2px', lineHeight: 1.1 }}>
+                    RAP BATTLE<br />BOT
+                </Title>
+                
+                <Text c="dimmed" ta="center" size="lg" style={{ maxWidth: 400 }}>
+                    Step into the arena against AI opponents or challenge your friends in real-time lyrical warfare.
+                </Text>
+
+                <Group mt="lg">
+                    <SignInButton mode="modal">
+                        <Button 
+                            size="xl" 
+                            radius="xl" 
+                            variant="gradient" 
+                            gradient={{ from: 'blue', to: 'cyan' }}
+                            rightSection={<IconFlame size={20} />}
+                        >
+                            Enter the Arena
+                        </Button>
+                    </SignInButton>
+                </Group>
+                
+                <Divider my="sm" label="Features" labelPosition="center" style={{ width: '100%' }} />
+                
+                <Group gap="xl" justify="center" c="dimmed">
+                    <Group gap={5}><IconMicrophone size={16} /><Text size="sm">Voice Input</Text></Group>
+                    <Group gap={5}><IconTrophy size={16} /><Text size="sm">Global Ranks</Text></Group>
+                    <Group gap={5}><IconUsers size={16} /><Text size="sm">Multiplayer</Text></Group>
+                </Group>
+            </Stack>
+        </Card>
+    </Container>
+);
