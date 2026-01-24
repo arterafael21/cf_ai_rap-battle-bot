@@ -36,11 +36,28 @@ export class Challenge {
                         this.p1 = { username: event.username, socket: webSocket, verse: null };
                     } else {
                         this.p2 = { username: event.username, socket: webSocket}
+
+                        if (this.p1) {
+                            try {
+                                this.p1.socket.send(JSON.stringify({
+                                    type: 'OPPONENT_JOINED',
+                                    username: this.p2.username
+                                }));
+                            } catch (e) { console.log('Failed to notify p1', e); }
+                        }
                         if (this.status === 'P1_READY') {
                             this.sendBattleStartToP2();
                         } else {
                             webSocket.send(JSON.stringify({ type: 'WAITING_FOR_OPPONENT' }));
                         }
+                    }
+                }
+
+                // --- TYPING RELAY ---
+                if (event.type === 'TYPING') {
+                    const otherPlayer = (this.p1 && this.p1.socket === webSocket) ? this.p2 : this.p1;
+                    if (otherPlayer) {
+                        otherPlayer.socket.send(JSON.stringify({ type: 'OPPONENT_TYPING' }));
                     }
                 }
 
@@ -130,7 +147,7 @@ export class Challenge {
         try {
             const prompt = `Judge this rap battle. 
                 MANDATORY WORD: "${word || 'NONE'}". If a word is specified, give +10 points if used.
-                Output JSON: { "p1_score": 5, "p2_score": 5, "comment": "..." }
+                YOU SHOULD ONLY OUTPUT THE RESULT IN JSON: { "p1_score": 5, "p2_score": 5, "comment": "..." } 
                 P1: "${p1.verse}"
                 P2: "${p2.verse}"`;
 
@@ -138,7 +155,15 @@ export class Challenge {
                 messages: [{ role: 'user', content: prompt }]
             });
 
+            if (!res || !res.response) {
+                throw new Error('Empty response from judge')
+            }
+
             const match = res.response.match(/\{[\s\S]*\}/);
+            if (!match) {
+                console.error('Judge Output Invalid', res.response);
+                return { winner: 'Draw', scores: { comment: 'Judge was confused.', p1_score: 5, p2_score: 5 } };
+            }
             const scores = match ? JSON.parse(match[0]) : { p1_score: 5, p2_score: 5, comment: "AI Error" };
 
             const winnerName = scores.p1_score > scores.p2_score ? p1.username : p2.username;

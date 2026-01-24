@@ -45,6 +45,9 @@ function RapBattleApp() {
     const [battleMode, setBattleMode] = useState('text');
 	const [isQueuing, setIsQueuing] = useState(false);
 	const [myRole, setMyRole] = useState(null);
+	const [isOpponentTyping, setIsOpponentTyping] = useState(false);
+	const typingTimeoutRef = useRef(null);
+	const [mySubmittedVerse, setMySubmittedVerse] = useState('');
     
     // WORD CHALLENGE STATE
     const [targetWord, setTargetWord] = useState(''); 
@@ -358,6 +361,7 @@ function RapBattleApp() {
             if (role == "CREATE") {
 				if (pendingVerse) {
 					setStatus('Sending Verse...');
+					setMySubmittedVerse(pendingVerse);
 
 					let audioData = null;
 					if (battleMode === 'audio' && recordedBlob) {
@@ -381,6 +385,18 @@ function RapBattleApp() {
         socket.onmessage = (event) => {
             const msg = JSON.parse(event.data);
 
+			if (msg.type === 'OPPONENT_JOINED') {
+				console.log('Opponent joined:', msg.username);
+				setP1Data({ name: msg.username });
+				setMode('battle_wait');
+			}
+
+			if (msg.type === 'OPPONENT_TYPING') {
+				setIsOpponentTyping(true);
+				if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+				typingTimeoutRef.current = setTimeout(() => setIsOpponentTyping(false), 2000);
+			}
+
 			if (msg.type === 'OPPONENT_DISCONNECTED') {
 				alert('Your opponent fled the battle! Match Ended (No Contest)');
 				if (ws.current) ws.current.close();
@@ -388,11 +404,14 @@ function RapBattleApp() {
 				setStatus('Ready');
 				return;
 			}
+
             if (msg.type == 'WAITING_FOR_OPPONENT') setMode('waiting_for_opponent');
+
             if (msg.type === "VERSE_ACCEPTED") {
 				setStatus('Verse sent! Waiting for P2...');
 				setMode('create_success');
 			}
+
 			if (msg.type === 'OPPONENT_JOINED') {
 				console.log("Opponent joined");
 			}
@@ -460,6 +479,15 @@ function RapBattleApp() {
         }
     };
 
+	const handleInput = (e) => {
+		const val = e.currentTarget.value;
+		setInput(val);
+
+		if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+			ws.current.send(JSON.stringify({ type: 'TYPING' }));
+		}
+	}
+
 	if (showOnboarding) {
 		return (
 			<OnboardingFlow
@@ -520,7 +548,10 @@ function RapBattleApp() {
 									<Divider style={{ opacity: 0.5 }} />
 									
 									<BattleInputArea 
-										input={input} setInput={setInput} 
+										input={input} setInput={(val) => {
+											setInput(val);
+											if (ws.current && ws.current.readyState === 1) ws.current.send(JSON.stringify({ type: 'TYPING' }))
+										}}
 										isRecording={isRecording} toggleMic={toggleMic} 
 										handleSend={handleBattle} isLoading={isLoading} status={status} 
 										placeholder={wordMode ? `Freestyle using "${targetWord}"...` : "Freestyle your bars..."} 
@@ -702,6 +733,40 @@ function RapBattleApp() {
 									}}>
 										Cancel
 									</Button>
+								</Stack>
+							</Card>
+						)}
+
+						{mode === 'battle_wait' && (
+							<Card shadow="sm" padding="lg" withBorder>
+								<Stack>
+									<Group justify="space-between">
+										<Title order={4}>Opponent: {p1Data?.name || "Unknown"}</Title>
+										<Badge color="yellow" variant="light">Opponent's Turn</Badge>
+									</Group>
+
+									{/* P1's VERSE (Already submitted) */}
+									<Card bg="blue.1" padding="md" radius="md" style={{ alignSelf: 'flex-end', maxWidth: '80%' }}>
+										<Text size="sm" style={{ whiteSpace: 'pre-line' }}>{mySubmittedVerse}</Text>
+									</Card>
+									<Text size="xs" c="dimmed" ta="right">You</Text>
+
+									<Divider my="sm" />
+
+									{/* P2's AREA (Typing Indicator) */}
+									<Group align="flex-start">
+										<IconUserCircle size={32} color="gray" />
+										{isOpponentTyping ? (
+											<Card bg="gray.1" padding="xs" radius="xl">
+												{/* Simple CSS Pulse Animation for dots */}
+												<Text size="sm" fw={700} c="dimmed">
+													Typing<span className="typing-dots">...</span>
+												</Text>
+											</Card>
+										) : (
+											<Text size="sm" c="dimmed" fs="italic">Thinking of a comeback...</Text>
+										)}
+									</Group>
 								</Stack>
 							</Card>
 						)}
