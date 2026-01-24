@@ -18,11 +18,13 @@ import {
   Input,
   CopyButton,
   Divider,
-  Center
+  Center,
+  SegmentedControl
 } from '@mantine/core';
 import { 
     IconMicrophone, IconMicrophoneOff, IconSend, IconTrash, 
-    IconPlayerPlay, IconTrophy, IconSwords, IconUsers, IconSearch, IconArrowLeft 
+    IconPlayerPlay, IconTrophy, IconSwords, IconUsers, IconSearch, IconArrowLeft,
+    IconWorld
 } from '@tabler/icons-react';
 import '@mantine/core/styles.css'
 
@@ -32,6 +34,7 @@ function RapBattleApp() {
 	const [username, setUsername] = useState('');
 	const [stats, setStats] = useState({ wins: 0, losses: 0, rank: 'Novice' });
   const [leaderboard, setLeaderboard] = useState([]);
+  const [leaderboardType, setLeaderboardType] = useState('single');
 
   // --- SINGLE PLAYER STATE ---
 	const [history, setHistory] = useState([]);
@@ -77,15 +80,20 @@ function RapBattleApp() {
 		}
 	};
 
-	const fetchLeaderboard = async () => {
+	const fetchLeaderboard = async (type='single') => {
 		try {
-			const res = await fetch('/leaderboard');
-			const data = await res.json();
-			setLeaderboard(data);
+			const endpoint = type === 'pvp' ? '/leaderboard/pvp' : '/leaderboard';
+      const res = await fetch(endpoint);
+      const data = await res.json();
+      setLeaderboard(data);
 		} catch (e) {
 			console.error(e);
 		}
 	};
+
+  useEffect(() => {
+    fetchLeaderboard(leaderboardType);
+  }), [leaderboardType];
 
 	const loadHistory = () => {
 		try {
@@ -298,6 +306,9 @@ function RapBattleApp() {
 		if (msg.type === 'RESULT') {
 			setDuelResult(msg.result);
 			setMode('result');
+
+			if (msg.message) alert(msg.message);
+			
 			ws.current.close(); 
 		}
 	};
@@ -581,8 +592,17 @@ function RapBattleApp() {
           <Tabs.Panel value="leaderboard" pt="md">
             <Card shadow="sm" padding="lg" radius="md" withBorder>
               <Group justify="space-between" mb="md">
-                <Title order={3}>Top 10 MCs</Title>
-                <Button variant="light" size="xs" onClick={fetchLeaderboard}>Refresh</Button>
+                <Title order={3}>Hall of Fame</Title>
+
+				{/* TOGGLE SWITCH */}
+				<SegmentedControl
+					value={leaderboardType}
+					onChange={setLeaderboardType}
+					data={[
+						{ label: 'Single Player', value='single' },
+						{ label: 'PVP Arena', value='pvp' },
+					]}
+				/>
               </Group>
               <Table striped>
                 <Table.Thead>

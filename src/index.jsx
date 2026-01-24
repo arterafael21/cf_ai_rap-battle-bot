@@ -261,6 +261,20 @@ app.get('/leaderboard', async (c) => {
     }
 });
 
+app.get('/leaderboard/pvp', async (c) => {
+    try {
+        const id = c.env.LEADERBOARD.idFromName("GLOBAL_PVP");
+        const stub = c.env.LEADERBOARD.get(id);
+
+        const response = await stub.fetch('http://do/');
+        const data = await response.json();
+        return c.json(data);
+    } catch (e) {
+        console.error(e);
+        return c.json([], 200);
+    }
+})
+
 
 // WEBSOCKET ROUTE
 app.get('/ws/battle/:id', async (c) => {
