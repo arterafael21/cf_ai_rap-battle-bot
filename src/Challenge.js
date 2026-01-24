@@ -32,7 +32,18 @@ export class Challenge {
 
                 // --- CREATE ---
                 if (event.type === 'CREATE') {
-                    this.p1 = { username: event.username, verse: event.verse, socket: webSocket };
+                    this.status = 'OPEN'
+                    this.finalResult = null;
+
+                    // save mode 
+                    this.battleMode = event.battleMode || 'text';
+
+                    this.p1 = { 
+                        username: event.username, 
+                        verse: event.verse, 
+                        socket: webSocket,
+                        audioData: event.audioData || null
+                    };
                     webSocket.send(JSON.stringify({ type: 'CREATED' }));
                 }
 
@@ -66,7 +77,9 @@ export class Challenge {
                     webSocket.send(JSON.stringify({
                         type: 'BATTLE_START',
                         opponent: this.p1.username,
-                        verse: this.p1.verse
+                        verse: this.p1.verse,
+                        battleMode: this.battleMode,
+                        audioData: this.p1.audioData
                     }));
                 }
 
@@ -79,6 +92,10 @@ export class Challenge {
                     // save state
                     this.status = 'FINISHED';
                     this.finalResult = result;
+
+                    result.p1_verse = this.p1_verse;
+                    result.p2_verse = this.p2_verse;
+                    result.p2_audio = this.p2.audioData
 
                     this.broadcast({ type: 'RESULT', result});
 
