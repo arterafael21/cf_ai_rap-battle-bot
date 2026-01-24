@@ -599,8 +599,8 @@ function RapBattleApp() {
 					value={leaderboardType}
 					onChange={setLeaderboardType}
 					data={[
-						{ label: 'Single Player', value='single' },
-						{ label: 'PVP Arena', value='pvp' },
+						{ label: 'Single Player', value:'single' },
+						{ label: 'PVP Arena', value:'pvp' },
 					]}
 				/>
               </Group>
