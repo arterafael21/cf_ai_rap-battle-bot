@@ -25,9 +25,11 @@ a:hover {
 body {
   margin: 0;
   display: flex;
-  place-items: center;
+  align-items: flex-start; 
+  justify-content: center; 
   min-width: 320px;
   min-height: 100vh;
+  padding-top: 20px; 
 }
 
 h1 {
@@ -49,10 +51,11 @@ button {
 button:hover {
   border-color: #646cff;
 }
-button:focus,
+
+/* button:focus,
 button:focus-visible {
   outline: 4px auto -webkit-focus-ring-color;
-}
+} */
 
 @media (prefers-color-scheme: light) {
   :root {
@@ -65,4 +68,10 @@ button:focus-visible {
   button {
     background-color: #f9f9f9;
   }
+}
+
+#root {
+  width: 100%;
+  display: flex;
+  justify-content: center;
 }
