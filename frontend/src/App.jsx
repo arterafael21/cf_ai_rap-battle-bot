@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-    MantineProvider, Container, Title, Card, Text, Button, Group, Badge, Stack, Grid, Loader, Tabs, Input, CopyButton, Divider, Center, SegmentedControl, Switch, rem, Modal, FileButton, TextInput, ActionIcon, Table
+    MantineProvider, Container, Title, Card, Text, Button, Group, Badge, Stack, Grid, Loader, Tabs, Input, CopyButton, Divider, Center, SegmentedControl, Switch, rem, Modal, FileButton, TextInput, ActionIcon, Table, Avatar
 } from '@mantine/core';
 import { 
     IconMicrophone, IconMicrophoneOff, IconTrophy, IconSwords, IconUsers, IconSearch, IconArrowLeft, IconShare, IconKeyboard, IconMusic, IconUserCircle, IconEdit
@@ -248,7 +248,7 @@ function RapBattleApp() {
 
     const shareReplay = () => {
         let link = window.location.href;
-        if (duelResult?.battle_id && !link.includes('replay')) {
+        if (duelResult?.battle_id && !li,nk.includes('replay')) {
             link = `${window.location.origin}${window.location.pathname}?replay=${duelResult.battle_id}`;
         }
         navigator.clipboard.writeText(link);
@@ -489,8 +489,6 @@ function RapBattleApp() {
         let audioData = null;
         if (battleMode === 'audio' && recordedBlob) audioData = await blobToBase64(recordedBlob);
         
-        // This is the CRITICAL fix for "Infinite Load"
-        // We actually send the verse now
         ws.current.send(JSON.stringify({
             type: 'SUBMIT_VERSE',
             verse: input,

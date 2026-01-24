@@ -12,12 +12,16 @@ export class Matchmaker {
         const pair = new WebSocketPair();
         const [client, server] = Object.values(pair);
 
+        this.handleSession(server);
+
         return new Response(null, { status: 101, webSocket: client });
     }
 
     handleSession(socket) {
         socket.accept();
         this.sessions.push(socket);
+
+        console.log(`Queue Update: ${this.sessions.length} player(s) waiting.`);
 
         // Check if we have a pair
         if (this.sessions.length >= 2) {
@@ -27,6 +31,7 @@ export class Matchmaker {
         // Handle disconnects (remove from queue)
         socket.addEventListener('close', () => {
             this.sessions = this.sessions.filter(s => s !== socket)
+            console.log(`Queue Update: Player left. ${this.sessions.length} player(s) waiting.`);
         });
     }
 
@@ -35,8 +40,11 @@ export class Matchmaker {
         const p1 = this.sessions.shift();
         const p2 = this.sessions.shift();
 
+        if (!p1 || !p2) return;
+
         // Generate Unique Battle Room ID
         const battleId = crypto.randomUUID();
+        console.log(`Match Found! Starting Battle ID: ${battleId}`);
 
         // Assign roles
         try {
@@ -45,7 +53,7 @@ export class Matchmaker {
 
             p1.send(msgP1);
             p2.send(msgP2);
-            
+
         } catch (e) { console.error("Match send failed", e); }
         
 
