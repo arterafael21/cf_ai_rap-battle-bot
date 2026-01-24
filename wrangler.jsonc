@@ -18,39 +18,17 @@
 	},
 	"durable_objects": {
 		"bindings": [
-			{
-				"name": "USER_PROFILE", // var name
-				"class_name": "UserProfile" // class name
-			},
-			{
-				"name": "LEADERBOARD",
-				"class_name": "Leaderboard"
-			},
-			{
-				"name": "CHALLENGE",
-				"class_name": "Challenge"
-			}
+			{ "name": "USER_PROFILE", "class_name": "UserProfile" },
+			{ "name": "LEADERBOARD", "class_name": "Leaderboard" },
+			{ "name": "CHALLENGE", "class_name": "Challenge" },
+			{ "name": "MATCHMAKER", "class_name": "Matchmaker" } 
 		]
 	},
 	"migrations": [
-		{
-			"tag": "v1",
-			"new_classes": [
-				"UserProfile"
-			]
-		},
-		{
-			"tag": "v2",
-			"new_classes": [
-				"Leaderboard"
-			]
-		},
-		{
-			"tag": "v3",
-			"new_classes": [
-				"Challenge"
-			]
-		}
+		{ "tag": "v1", "new_classes": [ "UserProfile" ] },
+		{ "tag": "v2", "new_classes": [ "Leaderboard" ] },
+		{ "tag": "v3", "new_classes": [ "Challenge" ] },
+		{ "tag": "v4", "new_classes": [ "Matchmaker" ] }
 	],
 	"d1_databases": [
 		{

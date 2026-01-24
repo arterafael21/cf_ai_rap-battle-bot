@@ -5,6 +5,7 @@ import { UserProfile } from './UserProfile';
 import { Leaderboard } from './Leaderboard';
 import { Challenge } from './Challenge';
 import { getRandomWord, OPPONENTS } from '../src/constants'; 
+import { Matchmaker } from './Matchmaker'
 
 const app = new Hono();
 
@@ -276,5 +277,11 @@ app.post('/onboarding/upload', async (c) => {
     return c.json({ success: true, description: roastContext });
 })
 
+app.get('/ws/queue', async (c) => {
+	const id = c.env.MATCHMAKER.idFromName('GLOBAL_QUEUE');
+	const stub = c.env.MATCHMAKER.get(id);
+	return stub.fetch(c.req.raw);
+});
+
 export default app;
-export { UserProfile, Leaderboard, Challenge };
+export { UserProfile, Leaderboard, Challenge, Matchmaker };

@@ -11,5 +11,5 @@ export const getRandomWord = () => {
 export const OPPONENTS = {
     'roboflow': { name: 'RoboFlow', color: 'blue', style: 'Basic (AABB)' },
     'bytebeater': { name: 'ByteBeater', color: 'red', style: 'Technical' },
-    'ai-ce': { name: 'AI-CE', color: 'orange', style: 'Funny' }
+    'ai-ce': { name: 'AI-CE', color: 'purple', style: 'Funny' }
 };

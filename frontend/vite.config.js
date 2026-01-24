@@ -6,17 +6,20 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      '/onboarding': {
+      '/ws': {
         target: 'http://127.0.0.1:8787',
         changeOrigin: true,
         secure: false,
+        ws: true, 
       },
-      '/leaderboard': 'http://localhost:8787',
-      '/battle': 'http://localhost:8787',
-      '/profile': 'http://localhost:8787',
-      '/speak': 'http://localhost:8787',
-      '/transcribe': 'http://localhost:8787',
-      '/challenge': 'http://localhost:8787',
+      '/onboarding': 'http://127.0.0.1:8787',
+      '/leaderboard': 'http://127.0.0.1:8787',
+      '/battle': 'http://127.0.0.1:8787',
+      '/profile': 'http://127.0.0.1:8787',
+      '/speak': 'http://127.0.0.1:8787',
+      '/transcribe': 'http://127.0.0.1:8787',
+      '/challenge': 'http://127.0.0.1:8787',
+      '/replay': 'http://127.0.0.1:8787',
     }
   }
 })

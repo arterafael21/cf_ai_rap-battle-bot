@@ -3,7 +3,7 @@ import {
     MantineProvider, Container, Title, Card, Text, Button, Group, Badge, Stack, Grid, Loader, Tabs, Input, CopyButton, Divider, Center, SegmentedControl, Switch, rem, Modal, FileButton, TextInput, ActionIcon, Table
 } from '@mantine/core';
 import { 
-    IconMicrophone, IconMicrophoneOff, IconTrophy, IconSwords, IconUsers, IconSearch, IconArrowLeft, IconShare, IconKeyboard
+    IconMicrophone, IconMicrophoneOff, IconTrophy, IconSwords, IconUsers, IconSearch, IconArrowLeft, IconShare, IconKeyboard, IconMusic
 } from '@tabler/icons-react';
 import '@mantine/core/styles.css';
 import { ClerkProvider, SignedIn, SignedOut, useUser, useAuth } from "@clerk/clerk-react";
@@ -43,6 +43,7 @@ function RapBattleApp() {
     const [p1Data, setP1Data] = useState(null); 
     const [duelResult, setDuelResult] = useState(null); 
     const [battleMode, setBattleMode] = useState('text');
+	const [isQueuing, setIsQueuing] = useState(false);
     
     // WORD CHALLENGE STATE
     const [targetWord, setTargetWord] = useState(''); 
@@ -277,6 +278,35 @@ function RapBattleApp() {
         connectToWebSocket(battleCode, 'JOIN');
     };
 
+	const joinQueue = () => {
+		setIsQueuing(true);
+		setStatus("Searching for opponent...");
+
+		// Connect to Matchmaker
+		const queueWs = new WebSocket('ws://127.0.0.1:8787/ws/queue');
+
+		queueWs.onmessage = (event) => {
+			const data = JSON.parse(event.data);
+			if (data.type === "MATCH_FOUND") {
+				setIsQueuing(false);
+				setStatus('Match Found! Connecting...');
+				setBattleCode(data.battleId);
+
+				// Automatically start the game with the assigned role
+				connectToWebSocket(data.battleId, data.role, battleMode);
+			}
+		};
+
+		queueWs.onclose = () => setIsQueuing(false);
+		ws.current = queueWs;
+	}
+
+	const cancelQueue = () => {
+		if (ws.current) ws.current.close();
+		setIsQueuing(false);
+		setStatus('Ready');
+	}
+
     const connectToWebSocket = (roomID, action, selectedMode='text') => {
         if (ws.current) ws.current.close();
         setStatus('Connecting...');
@@ -388,7 +418,7 @@ function RapBattleApp() {
                             <Stack gap="lg">
                                 <OpponentSelector current={opponent} setOpponent={setOpponent} />
                                 
-                                <Group justify="end">
+                                <Group justify="center">
                                     <Switch 
                                         label="Word Challenge" 
                                         checked={wordMode} 
@@ -419,64 +449,116 @@ function RapBattleApp() {
 
                 <Tabs.Panel value="multiplayer" pt="md">
                     {mode === 'menu' && (
-                        <Grid>
-                            <Grid.Col span={6}>
-                                <Card shadow="sm" padding="xl" radius="md" withBorder style={{height: '100%'}}>
-                                    <Stack align="center" justify="center" h={200}>
-                                        <IconSwords size={48} color="#228be6" />
-                                        <Title order={4}>Create Battle</Title>
-                                        <Button onClick={() => setMode('create')}>Start New Battle</Button>
-                                    </Stack>
-                                </Card>
-                            </Grid.Col>
-                            <Grid.Col span={6}>
-                                <Card shadow="sm" padding="xl" radius="md" withBorder style={{height: '100%'}}>
-                                    <Stack align="center" justify="center" h={200}>
-                                        <IconUsers size={48} color="#fa5252" />
-                                        <Title order={4}>Join Battle</Title>
-                                        <Button color="red" onClick={() => setMode('join')}>Enter Code</Button>
-                                    </Stack>
-                                </Card>
-                            </Grid.Col>
-                        </Grid>
+                        <Stack>
+                            {/* NEW: QUICK PLAY CARD */}
+                            <Card shadow="md" padding="xl" radius="lg" withBorder style={{ borderColor: '#228be6', borderWidth: 2 }}>
+                                <Stack align="center" gap="md">
+                                    <Title order={3} c="blue">QUICK PLAY</Title>
+                                    <Text ta="center" size="sm" c="dimmed">Enter the global queue and get matched instantly.</Text>
+                                    
+                                    {!isQueuing ? (
+                                        <Button 
+                                            size="xl" 
+                                            fullWidth 
+                                            radius="md" 
+                                            variant="gradient" 
+                                            gradient={{ from: 'blue', to: 'cyan' }}
+                                            onClick={joinQueue}
+                                            leftSection={<IconSwords size={28} />}
+                                        >
+                                            FIND MATCH
+                                        </Button>
+                                    ) : (
+                                        <Button 
+                                            size="xl" 
+                                            fullWidth 
+                                            radius="md" 
+                                            color="red" 
+                                            variant="outline"
+                                            onClick={cancelQueue}
+                                        >
+                                            CANCEL SEARCH
+                                        </Button>
+                                    )}
+                                    {isQueuing && <Loader color="blue" type="dots" />}
+                                </Stack>
+                            </Card>
+
+                            <Divider label="OR" labelPosition="center" my="sm" />
+
+                            {/* EXISTING PRIVATE OPTIONS */}
+                            <Grid>
+                                <Grid.Col span={6}>
+                                    <Card shadow="sm" padding="lg" radius="md" withBorder style={{height: '100%'}}>
+                                        <Stack align="center" justify="center" h={120}>
+                                            <IconUsers size={32} color="#228be6" />
+                                            <Title order={5}>Private Room</Title>
+                                            <Button variant="light" fullWidth onClick={() => setMode('create')}>Create</Button>
+                                        </Stack>
+                                    </Card>
+                                </Grid.Col>
+                                <Grid.Col span={6}>
+                                    <Card shadow="sm" padding="lg" radius="md" withBorder style={{height: '100%'}}>
+                                        <Stack align="center" justify="center" h={120}>
+                                            <IconSearch size={32} color="#fa5252" />
+                                            <Title order={5}>Join Room</Title>
+                                            <Button variant="light" color="red" fullWidth onClick={() => setMode('join')}>Enter Code</Button>
+                                        </Stack>
+                                    </Card>
+                                </Grid.Col>
+                            </Grid>
+                        </Stack>
                     )}
                     {mode === 'create' && (
-                        <Card shadow="sm" padding="lg" withBorder>
-                            <Group mb="md">
-                                <ActionIcon variant="subtle" onClick={() => setMode('menu')}><IconArrowLeft/></ActionIcon>
-                                <Title order={4}>Record Your Opening Verse</Title>
-                            </Group>
-                            
-                            <Switch 
-                                size="lg" 
-                                offLabel={<IconMicrophone style={{ width:rem(16), height:rem(16) }}/>} 
-                                onLabel={<IconKeyboard style={{ width:rem(16), height:rem(16) }}/>} 
-                                checked={battleMode === 'text'} 
-                                onChange={(event) => setBattleMode(event.currentTarget.checked ? 'text' : 'audio')} 
-                                label={battleMode === 'text' ? 'Text Mode' : 'Audio Mode'}
-                            />
-                            
-                            {/* MULTIPLAYER WORD TOGGLE */}
-                            <Group justify="end" mt="md">
-                                <Switch 
-                                    label="Word Challenge" 
-                                    checked={wordMode} 
-                                    onChange={(e) => setWordMode(e.currentTarget.checked)} 
-                                    color="orange" 
-                                />
-                            </Group>
-                            
-                            {/* Centered Word Display with Refresh */}
-                            {wordMode && <WordDisplay word={targetWord} onRefresh={refreshWord} />}
+                        <Container size="sm">
+                            <Card padding="lg" radius="lg" withBorder>
+                                <Stack gap="lg">
+                                    <Group justify="space-between">
+                                        <ActionIcon variant="subtle" color="gray" onClick={() => setMode('menu')}><IconArrowLeft /></ActionIcon>
+                                        <Title order={4}>Battle Setup</Title>
+                                        <div style={{ width: 28 }} /> {/* Spacer for balance */}
+                                    </Group>
 
-                            <BattleInputArea 
-                                input={input} setInput={setInput} 
-                                isRecording={isRecording} toggleMic={toggleMic} 
-                                handleSend={startMultiplayer} isLoading={isLoading} status={status} 
-                                placeholder={battleMode === 'audio' ? 'Press Record...' : 'Type your verse...'} 
-                                readOnly={battleMode === 'audio'}
-                            />
-                        </Card>
+                                    <Card bg="gray.0" radius="md" p="md">
+                                        <Stack gap="md">
+                                            <Text size="sm" fw={700} ta="center" c="dimmed">GAME MODE</Text>
+                                            <SegmentedControl
+                                                fullWidth
+                                                value={battleMode}
+                                                onChange={setBattleMode}
+                                                data={[
+                                                    { label: 'Text Battle', value: 'text', icon: <IconKeyboard size={16} /> },
+                                                    { label: 'Audio Battle', value: 'audio', icon: <IconMusic size={16} /> },
+                                                ]}
+                                            />
+                                            
+                                            <Divider />
+                                            
+                                            <Center>
+                                                <Switch 
+                                                    label="Word Challenge Mode" 
+                                                    checked={wordMode} 
+                                                    onChange={(e) => setWordMode(e.currentTarget.checked)} 
+                                                    color="orange"
+                                                    size="md"
+                                                />
+                                            </Center>
+                                            
+                                            {wordMode && <WordDisplay word={targetWord} onRefresh={refreshWord} />}
+                                        </Stack>
+                                    </Card>
+
+                                    <Title order={5} ta="center">Record Opening Verse</Title>
+                                    <BattleInputArea 
+                                        input={input} setInput={setInput} 
+                                        isRecording={isRecording} toggleMic={toggleMic} 
+                                        handleSend={startMultiplayer} isLoading={isLoading} status={status} 
+                                        placeholder={battleMode === 'audio' ? 'Press Record...' : 'Type your verse...'} 
+                                        readOnly={battleMode === 'audio'}
+                                    />
+                                </Stack>
+                            </Card>
+                        </Container>
                     )}
                     {mode === 'create_success' && (
                          <Card shadow="sm" padding="xl" withBorder>
