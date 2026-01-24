@@ -263,7 +263,7 @@ app.post('/onboarding/upload', async (c) => {
     const arrayBuffer = await imageFile.arrayBuffer();
     const inputs = {
         image: [...new Uint8Array(arrayBuffer)],
-        prompt: "Describe this person's appearance specifically for a roast battle. Focus on clothing, hair, and style. Be brief but specific."
+        prompt: "Analyze this image for a roast battle caricature. Focus harshly on specific details of clothing choices, hair style, accessories, and general vibe that could be mocked. Be brief, specific, and brutally honest."
     };
 
     let roastContext = "";

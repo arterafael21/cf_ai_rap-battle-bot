@@ -252,6 +252,7 @@ export const ProfileView = ({ user, stats, identity, onUpdateProfile, uploading 
     const [newName, setNewName] = React.useState(identity?.mc_name || '');
     const [newFile, setNewFile] = React.useState(null);
     const [preview, setPreview] = React.useState(null);
+    const [imageTs, setImageTs] = React.useState(Date.now());
 
     // Force image refresh cache buster
     const avatarUrl = `/avatar/${user.id}?t=${Date.now()}`;
@@ -271,10 +272,23 @@ export const ProfileView = ({ user, stats, identity, onUpdateProfile, uploading 
         try {
             await onUpdateProfile(newName, newFile);
             setIsEditing(false);
+            if (newFile) {
+                setImageTs(Date.now());
+            } else {
+                setPreview(null);
+            }
             setNewFile(null);
-            setPreview(null);
-        } catch(e) {}
+        } catch(e) {console.error("Error saving image:", e)}
     };
+
+    const toggleEdit = () => {
+        if (isEditing) {
+            setPreview(null);
+            setNewFile(null);
+            setNewName(identity?.mc_name || '');
+        }
+        setIsEditing(!isEditing);
+    }
 
     return (
         <Container size="sm">
@@ -287,14 +301,16 @@ export const ProfileView = ({ user, stats, identity, onUpdateProfile, uploading 
                             <div style={{ position: 'relative' }}>
                                 <img 
                                     src={preview || avatarUrl} 
-                                    onError={(e) => { e.target.onerror = null; e.target.src = user.imageUrl; }} 
+                                    onError={(e) => { 
+                                        if (!preview) { e.target.onerror = null; e.target.src = user.imageUrl; }
+                                    }} 
                                     alt="Profile" 
                                     style={{ 
                                         width: 100, height: 100, borderRadius: '50%', 
                                         border: '4px solid #228be6', objectFit: 'cover' 
                                     }} 
                                 />
-                                <Badge circle size="lg" color="blue" style={{ position: 'absolute', bottom: 0, right: 0 }}>
+                                <Badge circle size="lg" color="blue" style={{ position: 'absolute', bottom: 10, right: 3 }}>
                                     {stats.rank?.charAt(0) || 'N'}
                                 </Badge>
                             </div>
@@ -305,7 +321,8 @@ export const ProfileView = ({ user, stats, identity, onUpdateProfile, uploading 
                                 <Text size="xs" c="dimmed">Joined: {new Date(user.createdAt).toLocaleDateString()}</Text>
                             </Stack>
                         </Group>
-                        <Button variant="light" leftSection={<IconEdit size={16} />} onClick={() => setIsEditing(!isEditing)}>
+                        
+                        <Button variant="light" leftSection={<IconEdit size={16} />} onClick={toggleEdit}>
                             {isEditing ? "Cancel" : "Edit Profile"}
                         </Button>
                     </Group>
