@@ -127,12 +127,25 @@ export class Challenge {
         if (!winnerUsername || winnerUsername === "Draw") return;
 
         try {
+            // update global PVP leaderboard
             const id = this.env.LEADERBOARD.idFromName('GLOBAL_PVP');
             const stub = this.env.LEADERBOARD.get(id);
-
             await stub.fetch('http://do/submit', {
                 method: 'POST',
                 body: JSON.stringify({ username: winnerUsername })
+            });
+
+            // update User's Personal profile 
+            const userId = this.env.USER_PROFILE.idFromName(winnerUsername);
+            const userStub = this.env.USER_PROFILE.get(userId);
+
+            await userStub.fetch('http://do/update', {
+                method: 'POST',
+                headers: { 'CONTENT-TYPE': 'application/json' },
+                body: JSON.stringify({
+                    result: 'win',
+                    type: 'pvp'
+                })
             });
         } catch (e) {
             console.error("Leaderboard update failed", e);
