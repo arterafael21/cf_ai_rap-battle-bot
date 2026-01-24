@@ -4,6 +4,7 @@ import { createClerkClient } from '@clerk/backend';
 import { UserProfile } from './UserProfile';
 import { Leaderboard } from './Leaderboard';
 import { Challenge } from './Challenge';
+import { auth } from 'hono/utils/basic-auth';
 
 const app = new Hono();
 
@@ -55,10 +56,21 @@ app.post('/battle', async (c) => {
     const opponentID = body.opponent || 'roboflow';
     const opponentConfig = OPPONENTS[opponentID] || OPPONENTS['roboflow'];
     
+	// Fetch User Context
+	let visualContext = "";
+	if (c.env.DB) {
+		const userRow = await c.env.DB.prepare('SELECT roast_context, mc_name FROM users WHERE id = ?').bind(userId).first();
+		if (userRow && userRow.roast_context) {
+			visualContext = `\nVISUAL CONTEXT FOR ROASTING: The user looks like this: "${userRow.roast_context}". USE THIS TO ROAST THEM.`;
+		}
+	}
+
+	const systemPrompt = opponentConfig.system + visualContext;
+
     // 3. AI Rapper Generation
     const rapperRes = await c.env.AI.run('@cf/meta/llama-3-8b-instruct', {
         messages: [
-            { role : 'system', content: opponentConfig.system },
+            { role : 'system', content: systemPrompt },
             { role: 'user', content: userRap }
         ]
     });
@@ -154,11 +166,20 @@ app.post('/transcribe', async (c) => {
 // --- 3. GET PROFILE ---
 app.get('/profile/:userId', async (c) => {
     const userId = c.req.param('userId');
+
+	// Fetch Stats (DO)
     const id = c.env.USER_PROFILE.idFromName(userId);
     const obj = c.env.USER_PROFILE.get(id);
     const response = await obj.fetch('http://do/stats');
     const stats = await response.json();
-    return c.json({ user: userId, data: stats });
+
+	// Fetch Identity (D1)
+	let identity = { mc_name: null, roast_context: null };
+	if (c.env.DB) {
+		const userRow = await c.env.DB.prepare('SELECT mc_name, roast_context FROM users WHERE id=?').bind(userId).first();
+		if (userRow) identity = userRow;
+	}
+    return c.json({ user: userId, data: stats, identity });
 });
 
 // --- 4. TTS (SPEAK) ---
@@ -292,6 +313,100 @@ app.get('/replay/:id', async (c) => {
         return c.json({ error: 'Database error' }, 500);
     }
 });
+
+// ONBOARDING - UPDATE PROFILE
+app.post('/onboarding/update', async (c) => {
+	const authHeader = c.req.header('Authorization');
+	if (!authHeader) return c.json({ error: 'Unauthorized' }, 401);
+
+	// 1. Verify User
+	const clerk = createClerkClient({ secretKey: c.env.CLERK_SECRET_KEY });
+	const token = authHeader.split(' ')[1];
+	let userId;
+	try {
+		const { payload } = await clerk.verifyToken(token);
+		userId = payload.sub;
+	} catch (e) {
+		return c.json({ error: "Invalid Token" }, 401 );
+	}
+
+	const { mcName } = await c.req.json();
+
+	// 2. Upsert into D1
+	try {
+		// Check if user exists
+		const existing = await c.env.DB.prepare('SELECT * FROM users WEHRE id=?').bind(userId).first();
+
+		if (existing) {
+			await c.env.DB.prepare('UPDATE users SET mc_name=? WHERE id=?')
+				.bind(mcName, userId).run();
+		} else {
+			await c.env.DB.prepare('INSERT INTO USERS (id, mc_name, created_at) VALUES (? ? ?)')
+				.bind(userId, mcName, Date.now()).run()
+		}
+		return c.json({ success: true });
+	} catch (e) {
+		console.error(e);
+		return c.json({ error: "Database error" }, 500);
+	}
+});
+
+// ONBOARDING - UPLOAD IMAGE & ANALYZE
+app.post('/onboarding/upload', async (c) => {
+	// Verify Auth
+	const authHeader = c.req.header('Authorization');
+	if (!authHeader) return c.json({ error: 'Unauthorized' }, 401);
+	const token = authHeader.split(' ')[1];
+	const clerk = createClerkClient({ secretKey: c.env.CLERK_SECRET_KEY });
+	let userId;
+	try {
+		const { payload } = await clerk.verifyToken;
+		userId = payload.sub;
+	} catch (e) {
+		return c.json({ error: "Invalid Token" }, 401);
+	}
+
+	// 1. Parse Form Data
+	const formData = await c.req.parseBody();
+	const imageFile = formData['image'];
+
+	if (!imageFile) return c.json({ error: 'No image provided' }, 400);
+
+	// 2. AI Analysis
+	const arrayBuffer = await imageFile.arrayBuffer();
+	const inputs = {
+		image: [...new Uint8Array(arrayBuffer)],
+		prompt: "Describe this person's appearance specifically for a roast battle. Focus on their clothing style, hair, accessosries, and facial expression. Be descriptive. Be like a caricature artist but with words."
+	};
+
+	let roastContext = "";
+	try {
+		const aiRes = await c.env.AI.run('@cf/meta/llama-3.2-11b-vision-instruct', inputs);
+		roastContext = aiRes.response || 'A mystery rapper';
+	} catch (e) {
+		console.error("Vision AI Failed", e);
+		roastContext = 'A rapepr with an undescriable aura';
+	}
+
+	// 3. Upload to R2
+	await c.env.AVATAR_BUCKET.put(userId + ".png", arrayBuffer);
+
+	// 4. Save Context to D1
+	try {
+		const existing = await c.env.DB.prepare('SELECT * FROM users WHERE id=?').bind(userId).first();
+		if (existing) {
+			await c.env.DB.prepare('UPDATE users SET roast_context=? WHERE id=?')
+				.bind(roastContext, userId).run();
+		} else {
+			await c.env.DB.prepare('INSERT INTO users (id, roast_context, created_at) VALUES (?, ?, ?)')
+                .bind(userId, roastContext, Date.now()).run();
+		}
+	} catch (e) {
+		return c.json({ error: "DB Error"}, 500);
+	}
+
+	return c.json({ success: true, description });
+})
 
 export default app;
 export { UserProfile, Leaderboard, Challenge };

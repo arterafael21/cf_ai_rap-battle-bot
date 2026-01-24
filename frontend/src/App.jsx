@@ -22,6 +22,9 @@ import {
 	SegmentedControl,
 	Switch,
 	rem,
+	Modal,
+	FileButton,
+	TextInput
 } from '@mantine/core';
 import { 
 	IconMicrophone, IconMicrophoneOff, IconSend, IconTrash, 
@@ -44,6 +47,11 @@ function RapBattleApp() {
     // --- AUTH STATE ---
     const { user, isLoaded } = useUser();
     const { getToken } = useAuth();
+
+	// USER ONBOARDING
+	const [identity, setIdentity] = useState(null);
+	const [showOnboarding, setShowOnboarding] = useState(false);
+	const [uploading, setUploading] = useState(false);
     
     // --- GLOBAL STATE ---
     const [stats, setStats] = useState({ wins: 0, losses: 0, rank: 'Novice' });
@@ -101,10 +109,46 @@ function RapBattleApp() {
             const res = await fetch(`/profile/${userId}`);
             const data = await res.json();
             if (data.data) setStats(data.data);
+			if (data.identity) {
+				setIdentity(data.identity);
+				if (!data.identity.mc_name) setShowOnboarding(true);
+			}
         } catch (e) {
             console.error(e);
         }
     };
+
+	const handleOnboardingSubmit = async () => {
+		if (!user) return;
+		setUploading(true);
+		const token = await getToken();
+
+		// 1. Upload Image
+		if (recordedBlob) {
+			const formData = new FormData();
+			formData.append('image', recordedBlob);
+
+			await fetch('/onboarding/upload', {
+				method: 'POST',
+				headers: { 'Authorization': `Bearer ${token}`},
+				body: formData
+			});
+		}
+
+		// 2. Update Name
+		await fetch('/onboarding/update', {
+			method: 'POST',
+			headers: { 
+				'Authorization': `Bearer ${token}`,
+				'Content-Type': 'application/json'
+			},
+			body: JSON.stringify({ mcName: input })
+		});
+
+		setShowOnboarding(false);
+		setUploading(false);
+		fetchStats(user.id);
+	}
 
     const fetchLeaderboard = async (type='single') => {
         try {
@@ -435,402 +479,428 @@ function RapBattleApp() {
     // --- RENDER ---
     return (
     <Container size="sm" py="xl">
-      <Stack gap="lg">
-        {/* HEADER */}
-        <Group justify="space-between" align="center">
-          <div>
-            <Title order={2}>Rap Battle Bot</Title>
-            {/* Show User Identity */}
-            {!isLoaded ? <Loader size="xs"/> : (
-                 <Text c="dimmed" size="sm">
-                    {user ? `MC ${user.firstName}` : 'Please Sign In'}
-                 </Text>
-            )}
-          </div>
-          
-          {/* AUTH BUTTONS */}
-          <Group>
-            {!isLoaded ? null : (
-                <>
-                    <SignedOut>
-                        <SignInButton mode="modal">
-                            <Button variant="outline">Sign In</Button>
-                        </SignInButton>
-                    </SignedOut>
-                    <SignedIn>
-                        <Badge size="lg" color="blue" variant="light" mr="xs">
-                             W: {stats.wins} | Rank: {stats.rank}
-                        </Badge>
-                        <UserButton />
-                    </SignedIn>
-                </>
-            )}
-          </Group>
-        </Group>
+      	<Stack gap="lg">
+			{/* HEADER */}
+			<Group justify="space-between" align="center">
+			<div>
+				<Title order={2}>Rap Battle Bot</Title>
+				{/* Show User Identity */}
+				{!isLoaded ? <Loader size="xs"/> : (
+					<Text c="dimmed" size="sm">
+						{user ? `MC ${user.firstName}` : 'Please Sign In'}
+					</Text>
+				)}
+			</div>
+			
+			{/* AUTH BUTTONS */}
+			<Group>
+				{!isLoaded ? null : (
+					<>
+						<SignedOut>
+							<SignInButton mode="modal">
+								<Button variant="outline">Sign In</Button>
+							</SignInButton>
+						</SignedOut>
+						<SignedIn>
+							<Badge size="lg" color="blue" variant="light" mr="xs">
+								W: {stats.wins} | Rank: {stats.rank}
+							</Badge>
+							<UserButton />
+						</SignedIn>
+					</>
+				)}
+			</Group>
+			</Group>
 
-        {/* PROTECTED CONTENT: Only show tabs if signed in OR viewing replay */}
-        <SignedOut>
-             {/* If viewing a replay, show it even if signed out */}
-             {mode === 'result' ? null : (
-                 <Card withBorder padding="xl" radius="md">
-                     <Stack align="center">
-                         <IconTrophy size={48} color="gray"/>
-                         <Title order={3}>Welcome to the Arena</Title>
-                         <Text>Sign in to start battling AI or friends!</Text>
-                     </Stack>
-                 </Card>
-             )}
-        </SignedOut>
+			{/* PROTECTED CONTENT: Only show tabs if signed in OR viewing replay */}
+			<SignedOut>
+				{/* If viewing a replay, show it even if signed out */}
+				{mode === 'result' ? null : (
+					<Card withBorder padding="xl" radius="md">
+						<Stack align="center">
+							<IconTrophy size={48} color="gray"/>
+							<Title order={3}>Welcome to the Arena</Title>
+							<Text>Sign in to start battling AI or friends!</Text>
+						</Stack>
+					</Card>
+				)}
+			</SignedOut>
 
-        {/* GAME TABS (Protected) */}
-        <SignedIn>
-            <Tabs defaultValue="battle" keepMounted={false}>
-            <Tabs.List grow>
-                <Tabs.Tab value="battle" leftSection={<IconSwords size={18} />}>Single Player</Tabs.Tab>
-                <Tabs.Tab value="multiplayer" leftSection={<IconUsers size={18} />}>Multiplayer</Tabs.Tab>
-                <Tabs.Tab value="leaderboard" leftSection={<IconTrophy size={18} />}>Leaderboard</Tabs.Tab>
-            </Tabs.List>
+			{/* GAME TABS (Protected) */}
+			<SignedIn>
+				<Tabs defaultValue="battle" keepMounted={false}>
+				<Tabs.List grow>
+					<Tabs.Tab value="battle" leftSection={<IconSwords size={18} />}>Single Player</Tabs.Tab>
+					<Tabs.Tab value="multiplayer" leftSection={<IconUsers size={18} />}>Multiplayer</Tabs.Tab>
+					<Tabs.Tab value="leaderboard" leftSection={<IconTrophy size={18} />}>Leaderboard</Tabs.Tab>
+				</Tabs.List>
 
-            {/* TAB 1: SINGLE PLAYER */}
-            <Tabs.Panel value="battle" pt="md">
-                <Card shadow="sm" padding="lg" radius="md" withBorder>
-                <Stack>
-                    <Text fw={500}>Choose Opponent:</Text>
-                    <Group>
-                    {['roboflow', 'bytebeater', 'ai-ce'].map(opp => (
-                        <Button key={opp} 
-                            variant={opponent === opp ? 'filled' : 'light'} 
-                            onClick={() => setOpponent(opp)}
-                            color={opponent === opp ? 'blue' : 'gray'}
-                        >
-                            {opp.toUpperCase()}
-                        </Button>
-                    ))}
-                    </Group>
+				{/* TAB 1: SINGLE PLAYER */}
+				<Tabs.Panel value="battle" pt="md">
+					<Card shadow="sm" padding="lg" radius="md" withBorder>
+					<Stack>
+						<Text fw={500}>Choose Opponent:</Text>
+						<Group>
+						{['roboflow', 'bytebeater', 'ai-ce'].map(opp => (
+							<Button key={opp} 
+								variant={opponent === opp ? 'filled' : 'light'} 
+								onClick={() => setOpponent(opp)}
+								color={opponent === opp ? 'blue' : 'gray'}
+							>
+								{opp.toUpperCase()}
+							</Button>
+						))}
+						</Group>
 
-                    <Textarea 
-                        placeholder="Spit your bars..." 
-                        minRows={4} 
-                        value={input} 
-                        onChange={(e) => setInput(e.currentTarget.value)} 
-                    />
+						<Textarea 
+							placeholder="Spit your bars..." 
+							minRows={4} 
+							value={input} 
+							onChange={(e) => setInput(e.currentTarget.value)} 
+						/>
 
-                    <Group justify="space-between">
-                        <Button 
-                            color={isRecording ? 'red' : 'gray'} 
-                            onClick={toggleMic}
-                            leftSection={isRecording ? <IconMicrophoneOff/> : <IconMicrophone/>}
-                        >
-                            {isRecording ? 'Stop' : 'Record'}
-                        </Button>
-                        <Button onClick={handleBattle} loading={isLoading} rightSection={<IconSend size={16} />}>
-                            Battle AI
-                        </Button>
-                    </Group>
-                    <Text size="xs" ta="right" c="dimmed">{status}</Text>
-                </Stack>
-                </Card>
+						<Group justify="space-between">
+							<Button 
+								color={isRecording ? 'red' : 'gray'} 
+								onClick={toggleMic}
+								leftSection={isRecording ? <IconMicrophoneOff/> : <IconMicrophone/>}
+							>
+								{isRecording ? 'Stop' : 'Record'}
+							</Button>
+							<Button onClick={handleBattle} loading={isLoading} rightSection={<IconSend size={16} />}>
+								Battle AI
+							</Button>
+						</Group>
+						<Text size="xs" ta="right" c="dimmed">{status}</Text>
+					</Stack>
+					</Card>
 
-                <Group align="center" mb="sm" mt="xl">
-                    <Divider label="Battle History" labelPosition='center' style={{ flex: 1 }}/>
-                    {history.length > 0 && (
-                        <Button variant="subtle" color="red" size="compact-xs" onClick={clearHistory} leftSection={<IconTrash size={12}/>}>
-                                Clear
-                        </Button>
-                    )}
-                </Group>
+					<Group align="center" mb="sm" mt="xl">
+						<Divider label="Battle History" labelPosition='center' style={{ flex: 1 }}/>
+						{history.length > 0 && (
+							<Button variant="subtle" color="red" size="compact-xs" onClick={clearHistory} leftSection={<IconTrash size={12}/>}>
+									Clear
+							</Button>
+						)}
+					</Group>
 
-                {history.map((item) => (
-                <Card key={item.id} shadow="sm" padding="md" radius="md" withBorder mb="sm">
-                    <Grid>
-                    <Grid.Col span={6} style={{borderRight: '1px solid #eee'}}>
-                        <Text fw={700} c="blue">YOU</Text>
-                        <Text size="sm">{item.userRap}</Text>
-                    </Grid.Col>
-                    <Grid.Col span={6}>
-                        <Text fw={700} c="pink">{item.opponent?.toUpperCase()}</Text>
-                        <Text size="sm">{item.aiVerse}</Text>
-                        <Button size="xs" mt="xs" variant="subtle" onClick={() => playAudio(item.id, item.aiVerse, item.opponent)}>
-                            Play Audio
-                        </Button>
-                    </Grid.Col>
-                    </Grid>
-                    <Card.Section bg="gray.1" p="xs" mt="sm">
-                        <Center>
-                            <Text fw={700} c={item.result === 'win' ? 'green' : 'red'}>
-                                {item.result === 'win' ? 'WINNER' : 'DEFEATED'} ({item.scores?.user?.total} - {item.scores?.ai?.total})
-                            </Text>
-                        </Center>
-                    </Card.Section>
-                </Card>
-                ))}
-            </Tabs.Panel>
+					{history.map((item) => (
+					<Card key={item.id} shadow="sm" padding="md" radius="md" withBorder mb="sm">
+						<Grid>
+						<Grid.Col span={6} style={{borderRight: '1px solid #eee'}}>
+							<Text fw={700} c="blue">YOU</Text>
+							<Text size="sm">{item.userRap}</Text>
+						</Grid.Col>
+						<Grid.Col span={6}>
+							<Text fw={700} c="pink">{item.opponent?.toUpperCase()}</Text>
+							<Text size="sm">{item.aiVerse}</Text>
+							<Button size="xs" mt="xs" variant="subtle" onClick={() => playAudio(item.id, item.aiVerse, item.opponent)}>
+								Play Audio
+							</Button>
+						</Grid.Col>
+						</Grid>
+						<Card.Section bg="gray.1" p="xs" mt="sm">
+							<Center>
+								<Text fw={700} c={item.result === 'win' ? 'green' : 'red'}>
+									{item.result === 'win' ? 'WINNER' : 'DEFEATED'} ({item.scores?.user?.total} - {item.scores?.ai?.total})
+								</Text>
+							</Center>
+						</Card.Section>
+					</Card>
+					))}
+				</Tabs.Panel>
 
-            {/* TAB 2: MULTIPLAYER */}
-            <Tabs.Panel value="multiplayer" pt="md">
+				{/* TAB 2: MULTIPLAYER */}
+				<Tabs.Panel value="multiplayer" pt="md">
+					
+					{mode === 'menu' && (
+						<Grid>
+							<Grid.Col span={6}>
+								<Card shadow="sm" padding="xl" radius="md" withBorder style={{height: '100%'}}>
+									<Stack align="center" justify="center" h={200}>
+										<IconSwords size={48} color="#228be6" />
+										<Title order={4}>Create Battle</Title>
+										<Button fullWidth onClick={() => setMode('create')}>Start New Battle</Button>
+									</Stack>
+								</Card>
+							</Grid.Col>
+							<Grid.Col span={6}>
+								<Card shadow="sm" padding="xl" radius="md" withBorder style={{height: '100%'}}>
+									<Stack align="center" justify="center" h={200}>
+										<IconUsers size={48} color="#fa5252" />
+										<Title order={4}>Join Battle</Title>
+										<Button color="red" fullWidth onClick={() => setMode('join')}>Enter Code</Button>
+									</Stack>
+								</Card>
+							</Grid.Col>
+						</Grid>
+					)}
+
+					{/* CREATE SCREEN */}
+					{mode === 'create' && (
+						<Card shadow="sm" padding="lg" withBorder>
+							<Group mb="md">
+								<ActionIcon variant="subtle" onClick={() => setMode('menu')}><IconArrowLeft/></ActionIcon>
+								<Title order={4}>Record Your Opening Verse</Title>
+							</Group>
+
+							<Switch
+								size="lg"
+								offLabel={<IconMicrophone style={{ width:rem(16), height:rem(16) }}/>}
+								onLabel={<IconKeyboard style={{ width:rem(16), height:rem(16) }}/>}
+								checked={battleMode === 'text'}
+								onChange={(event) => setBattleMode(event.currentTarget.checked ? 'text' : 'audio')}
+								label={battleMode === 'text' ? 'Text Mode' : 'Audio Mode'}
+							/>
+
+							<Textarea 
+								placeholder={battleMode === 'audio' ? 'Press Record to start rapping...' : 'Type your verse here...'} 
+								minRows={4} 
+								value={input} 
+								onChange={(e) => setInput(e.currentTarget.value)}
+								mb="md"
+								readOnly={battleMode === 'audio'}
+								variant={battleMode === 'audio' ? 'filled' : 'default'}
+							/>
+							<Group justify="space-between">
+								{battleMode === 'audio' && (
+									<Button color={isRecording ? 'red' : 'gray'} onClick={toggleMic} leftSection={isRecording ? <IconMicrophoneOff/> : <IconMicrophone/>}>
+										{isRecording ? 'Stop' : 'Record'}
+									</Button>
+								)}
+								{battleMode === 'text' && <div />}
+								<Button onClick={startMultiplayer} loading={isLoading}>Create Challenge</Button>
+							</Group>
+						</Card>
+					)}
+
+					{/* SUCCESS SCREEN */}
+					{mode === 'create_success' && (
+						<Card shadow="sm" padding="xl" withBorder>
+							<Stack align="center">
+								<IconTrophy size={64} color="gold" />
+								<Title order={3}>Battle Room Ready!</Title>
+								<Group>
+									<Badge size="xl" variant="filled" color="dark">{battleCode}</Badge>
+									<CopyButton value={battleCode}>
+										{({ copied, copy }) => (
+											<Button color={copied ? 'teal' : 'blue'} onClick={copy}>{copied ? 'Copied' : 'Copy Code'}</Button>
+										)}
+									</CopyButton>
+								</Group>
+								<Text c="dimmed" size="xs">Waiting for opponent to join...</Text>
+								<Button variant="subtle" onClick={() => { ws.current.close(); setMode('menu'); }}>Cancel</Button>
+							</Stack>
+						</Card>
+					)}
+
+					{/* JOIN SCREEN */}
+					{mode === 'join' && (
+						<Card shadow="sm" padding="lg" withBorder>
+							<Group mb="md">
+								<ActionIcon variant="subtle" onClick={() => setMode('menu')}><IconArrowLeft/></ActionIcon>
+								<Title order={4}>Enter Battle Code</Title>
+							</Group>
+							<Group>
+								<Input placeholder="e.g. 1234abc" style={{flex: 1}} value={battleCode} onChange={(e) => setBattleCode(e.currentTarget.value)}/>
+								<Button onClick={joinMultiplayer} loading={isLoading} leftSection={<IconSearch size={16}/>}>Join</Button>
+							</Group>
+						</Card>
+					)}
+
+					{/* FIGHT SCREEN */}
+					{mode === 'fight' && p1Data && (
+						<Card shadow="sm" padding="lg" withBorder>
+							<Stack>
+								<Group justify="space-between">
+									<Title order={4}>Opponent: {p1Data.name}</Title>
+									<Badge color={battleMode === 'audio' ? 'pink' : 'gray'}>
+										{battleMode === 'audio' ? 'Audio Battle' : 'Text Battle'}
+									</Badge>
+								</Group>
+
+								{battleMode === 'audio' && (
+									<Card bg={timer < 10 ? 'red.1' : 'blue.1'} mb="md" radius="md">
+										<Group justify="space-between">
+											<Text fw={700}>⏱️ TIME TO REPLY:</Text>
+											<Title order={3} c={timer < 10 ? 'red' : 'blue'}>{timer}s</Title>
+										</Group>
+										<div style={{ width: '100%', height: '6px', background: '#ddd', marginTop: '10px', borderRadius: '4px' }}>
+											<div style={{ width: `${(timer / 30) * 100}%`, height: '100%', background: timer < 10 ? 'red' : '#228be6', transition: 'width 1s linear', borderRadius: '4px'}}/>
+										</div>
+									</Card>
+								)}
+
+								<Card bg="gray.1" padding="md" radius="md">
+									<Text size="lg" style={{fontStyle: 'italic'}}>"{p1Data.verse}"</Text>
+								</Card>
+								<Divider label="Your Turn" labelPosition="center" />
+								<Textarea 
+									placeholder="Write your comeback..." 
+									minRows={4} 
+									value={input} 
+									onChange={(e) => setInput(e.currentTarget.value)}
+									readOnly={battleMode === 'audio'}
+									variant={battleMode === 'audio' ? 'filled' : 'default'}
+								/>
+								
+								<Group justify="space-between">
+									{battleMode === 'audio' ? (
+										<Button color={isRecording ? 'red' : 'gray'} onClick={toggleMic} leftSection={isRecording ? <IconMicrophoneOff/> : <IconMicrophone/>}>
+											{isRecording ? 'Stop' : 'Record'}
+										</Button>
+									) : <div/>}
+									<Button color="red" onClick={sendWsReply} loading={isLoading}>Finish Him!</Button>
+								</Group>
+							</Stack>
+						</Card>
+					)}
+
+					{mode === 'judging' && (
+						<Card h={300} withBorder>
+							<Center h="100%">
+								<Stack align="center">
+									<Loader size="xl" color="red" type="bars"/>
+									<Title order={3}>AI Judge is Deciding...</Title>
+								</Stack>
+							</Center>
+						</Card>
+					)}
+
+					{mode === 'result' && duelResult && (
+						<Card shadow="sm" padding="xl" withBorder>
+							<Stack align="center">
+								<Title order={2}>Winner: {duelResult.winner}</Title>
+								<Grid style={{ width: '100%' }} gutter="lg">
+									<Grid.Col span={6}>
+										<Card bg="blue.1" padding="sm" radius="md">
+											<Text size="xs" fw={700} c="dimmed">PLAYER 1</Text>
+											<Text size="sm" style={{ fontStyle: 'italic' }}>"{duelResult.p1_verse}"</Text>
+										</Card>
+									</Grid.Col>
+									<Grid.Col span={6}>
+										<Card bg="red.1" padding="sm" radius="md">
+											<Text size="xs" fw={700} c="dimmed">PLAYER 2</Text>
+											<Text size="sm" style={{fontStyle: 'italic'}}>"{duelResult.p2_verse}"</Text>
+										</Card>
+									</Grid.Col>
+								</Grid>
+								<Group gap="xl" mt="md">
+									<Stack align="center">
+										<Text fw={700}>P1 Score</Text>
+										<Badge size="xl" color={duelResult.winnerCode === 'p1_win' ? 'green' : 'grey'}>{duelResult.scores.p1_score}</Badge>
+									</Stack>
+									<Title order={3}>VS</Title>
+									<Stack align="center">
+										<Text fw={700}>P2 Score</Text>
+										<Badge size="xl" color={duelResult.winnerCode === 'p2_win' ? 'green' : 'gray'}>{duelResult.scores.p2_score}</Badge>
+									</Stack>
+								</Group>
+								<Text c="dimmed" mt="md" ta="center">"{duelResult.scores.comment}"</Text>
+								<Button mt="lg" onClick={() => { setMode("menu"); setInput(''); }}>Back to Menu</Button>
+								{/* SHARE BUTTON */}
+								{window.location.search.includes('replay') && (
+									<Button variant="light" leftSection={<IconShare size={16}/>} onClick={shareReplay}>
+										Share Replay
+									</Button>
+								)}
+							</Stack>
+						</Card>
+					)}
+				</Tabs.Panel>
+
+				{/* TAB 3: LEADERBOARD */}
+				<Tabs.Panel value="leaderboard" pt="md">
+					<Card shadow="sm" padding="lg" radius="md" withBorder>
+					<Group justify="space-between" mb="md">
+						<Title order={3}>Hall of Fame</Title>
+						<SegmentedControl
+							value={leaderboardType}
+							onChange={setLeaderboardType}
+							data={[
+								{ label: 'Single Player', value:'single' },
+								{ label: 'PVP Arena', value:'pvp' },
+							]}
+						/>
+					</Group>
+					<Table striped>
+						<Table.Thead>
+						<Table.Tr>
+							<Table.Th>Rank</Table.Th>
+							<Table.Th>Rapper</Table.Th>
+							<Table.Th>Wins</Table.Th>
+						</Table.Tr>
+						</Table.Thead>
+						<Table.Tbody>
+						{leaderboard.map((player, index) => (
+							<Table.Tr key={player.username}>
+							<Table.Td>#{index + 1}</Table.Td>
+							<Table.Td fw={700}>{player.username}</Table.Td>
+							<Table.Td>{player.wins}</Table.Td>
+							</Table.Tr>
+						))}
+						</Table.Tbody>
+					</Table>
+					</Card>
+				</Tabs.Panel>
+				</Tabs>
+			</SignedIn>
+
+			{/* REPLAY MODE (Showing result to anyone, signed in or not) */}
+			{mode === 'result' && !user && duelResult && (
+				<Card shadow="sm" padding="xl" withBorder mt="xl">
+					<Stack align="center">
+						<Badge color="red">REPLAY MODE</Badge>
+						<Title order={2}>Winner: {duelResult.winner}</Title>
+						<Grid style={{ width: '100%' }} gutter="lg">
+							<Grid.Col span={6}>
+								<Card bg="blue.1" padding="sm" radius="md">
+									<Text size="xs" fw={700} c="dimmed">PLAYER 1</Text>
+									<Text size="sm" style={{ fontStyle: 'italic' }}>"{duelResult.p1_verse}"</Text>
+								</Card>
+							</Grid.Col>
+							<Grid.Col span={6}>
+								<Card bg="red.1" padding="sm" radius="md">
+									<Text size="xs" fw={700} c="dimmed">PLAYER 2</Text>
+									<Text size="sm" style={{fontStyle: 'italic'}}>"{duelResult.p2_verse}"</Text>
+								</Card>
+							</Grid.Col>
+						</Grid>
+						<Text c="dimmed" mt="md" ta="center">"{duelResult.scores.comment}"</Text>
+						<Button variant="light" leftSection={<IconShare size={16}/>} onClick={shareReplay}>
+							Share This Replay
+						</Button>
+					</Stack>
+				</Card>
+			)}
+
+			</Stack>
+			<Modal 
+				opened={showOnboarding} 
+				onClose={() => {}} // Force them to finish
+				title="Setup Your Rapper Profile"
+				centered
+				withCloseButton={false}
+			>
+            <Stack>
+                <TextInput 
+                    label="MC Name" 
+                    placeholder="e.g. Lil Cloud" 
+                    value={input} // Use a specific state for this in real code
+                    onChange={(e) => setInput(e.target.value)}
+                />
                 
-                {mode === 'menu' && (
-                    <Grid>
-                        <Grid.Col span={6}>
-                            <Card shadow="sm" padding="xl" radius="md" withBorder style={{height: '100%'}}>
-                                <Stack align="center" justify="center" h={200}>
-                                    <IconSwords size={48} color="#228be6" />
-                                    <Title order={4}>Create Battle</Title>
-                                    <Button fullWidth onClick={() => setMode('create')}>Start New Battle</Button>
-                                </Stack>
-                            </Card>
-                        </Grid.Col>
-                        <Grid.Col span={6}>
-                            <Card shadow="sm" padding="xl" radius="md" withBorder style={{height: '100%'}}>
-                                <Stack align="center" justify="center" h={200}>
-                                    <IconUsers size={48} color="#fa5252" />
-                                    <Title order={4}>Join Battle</Title>
-                                    <Button color="red" fullWidth onClick={() => setMode('join')}>Enter Code</Button>
-                                </Stack>
-                            </Card>
-                        </Grid.Col>
-                    </Grid>
-                )}
+                <Text size="sm">Upload a photo for the AI to analyze and roast (Optional)</Text>
+                <FileButton onChange={setRecordedBlob} accept="image/png,image/jpeg"> 
+                    {(props) => <Button {...props}>Upload Selfie</Button>} 
+                </FileButton>
+                {recordedBlob && <Text size="xs">Image selected: {recordedBlob.name}</Text>}
 
-                {/* CREATE SCREEN */}
-                {mode === 'create' && (
-                    <Card shadow="sm" padding="lg" withBorder>
-                        <Group mb="md">
-                            <ActionIcon variant="subtle" onClick={() => setMode('menu')}><IconArrowLeft/></ActionIcon>
-                            <Title order={4}>Record Your Opening Verse</Title>
-                        </Group>
-
-                        <Switch
-                            size="lg"
-                            offLabel={<IconMicrophone style={{ width:rem(16), height:rem(16) }}/>}
-                            onLabel={<IconKeyboard style={{ width:rem(16), height:rem(16) }}/>}
-                            checked={battleMode === 'text'}
-                            onChange={(event) => setBattleMode(event.currentTarget.checked ? 'text' : 'audio')}
-                            label={battleMode === 'text' ? 'Text Mode' : 'Audio Mode'}
-                        />
-
-                        <Textarea 
-                            placeholder={battleMode === 'audio' ? 'Press Record to start rapping...' : 'Type your verse here...'} 
-                            minRows={4} 
-                            value={input} 
-                            onChange={(e) => setInput(e.currentTarget.value)}
-                            mb="md"
-                            readOnly={battleMode === 'audio'}
-                            variant={battleMode === 'audio' ? 'filled' : 'default'}
-                        />
-                        <Group justify="space-between">
-                            {battleMode === 'audio' && (
-                                <Button color={isRecording ? 'red' : 'gray'} onClick={toggleMic} leftSection={isRecording ? <IconMicrophoneOff/> : <IconMicrophone/>}>
-                                    {isRecording ? 'Stop' : 'Record'}
-                                </Button>
-                            )}
-                            {battleMode === 'text' && <div />}
-                            <Button onClick={startMultiplayer} loading={isLoading}>Create Challenge</Button>
-                        </Group>
-                    </Card>
-                )}
-
-                {/* SUCCESS SCREEN */}
-                {mode === 'create_success' && (
-                    <Card shadow="sm" padding="xl" withBorder>
-                        <Stack align="center">
-                            <IconTrophy size={64} color="gold" />
-                            <Title order={3}>Battle Room Ready!</Title>
-                            <Group>
-                                <Badge size="xl" variant="filled" color="dark">{battleCode}</Badge>
-                                <CopyButton value={battleCode}>
-                                    {({ copied, copy }) => (
-                                        <Button color={copied ? 'teal' : 'blue'} onClick={copy}>{copied ? 'Copied' : 'Copy Code'}</Button>
-                                    )}
-                                </CopyButton>
-                            </Group>
-                            <Text c="dimmed" size="xs">Waiting for opponent to join...</Text>
-                            <Button variant="subtle" onClick={() => { ws.current.close(); setMode('menu'); }}>Cancel</Button>
-                        </Stack>
-                    </Card>
-                )}
-
-                {/* JOIN SCREEN */}
-                {mode === 'join' && (
-                    <Card shadow="sm" padding="lg" withBorder>
-                        <Group mb="md">
-                            <ActionIcon variant="subtle" onClick={() => setMode('menu')}><IconArrowLeft/></ActionIcon>
-                            <Title order={4}>Enter Battle Code</Title>
-                        </Group>
-                        <Group>
-                            <Input placeholder="e.g. 1234abc" style={{flex: 1}} value={battleCode} onChange={(e) => setBattleCode(e.currentTarget.value)}/>
-                            <Button onClick={joinMultiplayer} loading={isLoading} leftSection={<IconSearch size={16}/>}>Join</Button>
-                        </Group>
-                    </Card>
-                )}
-
-                {/* FIGHT SCREEN */}
-                {mode === 'fight' && p1Data && (
-                    <Card shadow="sm" padding="lg" withBorder>
-                        <Stack>
-                            <Group justify="space-between">
-                                <Title order={4}>Opponent: {p1Data.name}</Title>
-                                <Badge color={battleMode === 'audio' ? 'pink' : 'gray'}>
-                                    {battleMode === 'audio' ? 'Audio Battle' : 'Text Battle'}
-                                </Badge>
-                            </Group>
-
-                            {battleMode === 'audio' && (
-                                <Card bg={timer < 10 ? 'red.1' : 'blue.1'} mb="md" radius="md">
-                                    <Group justify="space-between">
-                                        <Text fw={700}>⏱️ TIME TO REPLY:</Text>
-                                        <Title order={3} c={timer < 10 ? 'red' : 'blue'}>{timer}s</Title>
-                                    </Group>
-                                    <div style={{ width: '100%', height: '6px', background: '#ddd', marginTop: '10px', borderRadius: '4px' }}>
-                                        <div style={{ width: `${(timer / 30) * 100}%`, height: '100%', background: timer < 10 ? 'red' : '#228be6', transition: 'width 1s linear', borderRadius: '4px'}}/>
-                                    </div>
-                                </Card>
-                            )}
-
-                            <Card bg="gray.1" padding="md" radius="md">
-                                <Text size="lg" style={{fontStyle: 'italic'}}>"{p1Data.verse}"</Text>
-                            </Card>
-                            <Divider label="Your Turn" labelPosition="center" />
-                            <Textarea 
-                                placeholder="Write your comeback..." 
-                                minRows={4} 
-                                value={input} 
-                                onChange={(e) => setInput(e.currentTarget.value)}
-                                readOnly={battleMode === 'audio'}
-                                variant={battleMode === 'audio' ? 'filled' : 'default'}
-                            />
-                            
-                            <Group justify="space-between">
-                                {battleMode === 'audio' ? (
-                                    <Button color={isRecording ? 'red' : 'gray'} onClick={toggleMic} leftSection={isRecording ? <IconMicrophoneOff/> : <IconMicrophone/>}>
-                                        {isRecording ? 'Stop' : 'Record'}
-                                    </Button>
-                                ) : <div/>}
-                                <Button color="red" onClick={sendWsReply} loading={isLoading}>Finish Him!</Button>
-                            </Group>
-                        </Stack>
-                    </Card>
-                )}
-
-                {mode === 'judging' && (
-                    <Card h={300} withBorder>
-                        <Center h="100%">
-                            <Stack align="center">
-                                <Loader size="xl" color="red" type="bars"/>
-                                <Title order={3}>AI Judge is Deciding...</Title>
-                            </Stack>
-                        </Center>
-                    </Card>
-                )}
-
-                {mode === 'result' && duelResult && (
-                    <Card shadow="sm" padding="xl" withBorder>
-                        <Stack align="center">
-                            <Title order={2}>Winner: {duelResult.winner}</Title>
-                            <Grid style={{ width: '100%' }} gutter="lg">
-                                <Grid.Col span={6}>
-                                    <Card bg="blue.1" padding="sm" radius="md">
-                                        <Text size="xs" fw={700} c="dimmed">PLAYER 1</Text>
-                                        <Text size="sm" style={{ fontStyle: 'italic' }}>"{duelResult.p1_verse}"</Text>
-                                    </Card>
-                                </Grid.Col>
-                                <Grid.Col span={6}>
-                                    <Card bg="red.1" padding="sm" radius="md">
-                                        <Text size="xs" fw={700} c="dimmed">PLAYER 2</Text>
-                                        <Text size="sm" style={{fontStyle: 'italic'}}>"{duelResult.p2_verse}"</Text>
-                                    </Card>
-                                </Grid.Col>
-                            </Grid>
-                            <Group gap="xl" mt="md">
-                                <Stack align="center">
-                                    <Text fw={700}>P1 Score</Text>
-                                    <Badge size="xl" color={duelResult.winnerCode === 'p1_win' ? 'green' : 'grey'}>{duelResult.scores.p1_score}</Badge>
-                                </Stack>
-                                <Title order={3}>VS</Title>
-                                <Stack align="center">
-                                    <Text fw={700}>P2 Score</Text>
-                                    <Badge size="xl" color={duelResult.winnerCode === 'p2_win' ? 'green' : 'gray'}>{duelResult.scores.p2_score}</Badge>
-                                </Stack>
-                            </Group>
-                            <Text c="dimmed" mt="md" ta="center">"{duelResult.scores.comment}"</Text>
-                            <Button mt="lg" onClick={() => { setMode("menu"); setInput(''); }}>Back to Menu</Button>
-                            {/* SHARE BUTTON */}
-                            {window.location.search.includes('replay') && (
-                                <Button variant="light" leftSection={<IconShare size={16}/>} onClick={shareReplay}>
-                                    Share Replay
-                                </Button>
-                            )}
-                        </Stack>
-                    </Card>
-                )}
-            </Tabs.Panel>
-
-            {/* TAB 3: LEADERBOARD */}
-            <Tabs.Panel value="leaderboard" pt="md">
-                <Card shadow="sm" padding="lg" radius="md" withBorder>
-                <Group justify="space-between" mb="md">
-                    <Title order={3}>Hall of Fame</Title>
-                    <SegmentedControl
-                        value={leaderboardType}
-                        onChange={setLeaderboardType}
-                        data={[
-                            { label: 'Single Player', value:'single' },
-                            { label: 'PVP Arena', value:'pvp' },
-                        ]}
-                    />
-                </Group>
-                <Table striped>
-                    <Table.Thead>
-                    <Table.Tr>
-                        <Table.Th>Rank</Table.Th>
-                        <Table.Th>Rapper</Table.Th>
-                        <Table.Th>Wins</Table.Th>
-                    </Table.Tr>
-                    </Table.Thead>
-                    <Table.Tbody>
-                    {leaderboard.map((player, index) => (
-                        <Table.Tr key={player.username}>
-                        <Table.Td>#{index + 1}</Table.Td>
-                        <Table.Td fw={700}>{player.username}</Table.Td>
-                        <Table.Td>{player.wins}</Table.Td>
-                        </Table.Tr>
-                    ))}
-                    </Table.Tbody>
-                </Table>
-                </Card>
-            </Tabs.Panel>
-            </Tabs>
-        </SignedIn>
-
-        {/* REPLAY MODE (Showing result to anyone, signed in or not) */}
-        {mode === 'result' && !user && duelResult && (
-             <Card shadow="sm" padding="xl" withBorder mt="xl">
-                <Stack align="center">
-                     <Badge color="red">REPLAY MODE</Badge>
-                     <Title order={2}>Winner: {duelResult.winner}</Title>
-                     <Grid style={{ width: '100%' }} gutter="lg">
-                        <Grid.Col span={6}>
-                            <Card bg="blue.1" padding="sm" radius="md">
-                                <Text size="xs" fw={700} c="dimmed">PLAYER 1</Text>
-                                <Text size="sm" style={{ fontStyle: 'italic' }}>"{duelResult.p1_verse}"</Text>
-                            </Card>
-                        </Grid.Col>
-                        <Grid.Col span={6}>
-                            <Card bg="red.1" padding="sm" radius="md">
-                                <Text size="xs" fw={700} c="dimmed">PLAYER 2</Text>
-                                <Text size="sm" style={{fontStyle: 'italic'}}>"{duelResult.p2_verse}"</Text>
-                            </Card>
-                        </Grid.Col>
-                    </Grid>
-                    <Text c="dimmed" mt="md" ta="center">"{duelResult.scores.comment}"</Text>
-                     <Button variant="light" leftSection={<IconShare size={16}/>} onClick={shareReplay}>
-                        Share This Replay
-                    </Button>
-                </Stack>
-             </Card>
-        )}
-
-      </Stack>
+                <Button onClick={handleOnboardingSubmit} loading={uploading}>
+                    Enter the Arena
+                </Button>
+            </Stack>
+        </Modal>
     </Container>
     );
 }
