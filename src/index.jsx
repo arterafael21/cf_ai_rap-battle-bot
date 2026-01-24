@@ -121,19 +121,22 @@ app.post('/battle', async (c) => {
         const id = c.env.USER_PROFILE.idFromName(userId);
         const stub = c.env.USER_PROFILE.get(id);
 		const hasWordBonus = scores.user.word_bonus > 0;
+
+		// 1. UPDATE PROFILE
         const userUpdateRes = await stub.fetch('http://do/update', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ result: result, type: 'ai', hasWordBonus: hasWordBonus })
         });
         const userData = await userUpdateRes.json();
-        
-        if (result === 'win' && userData.wins_against_ai) {
+
+		// 2. SUBMIT TO LEADERBOARD
+        if (result === 'win' && userData.ai_score > 0) {
             const lbId = c.env.LEADERBOARD.idFromName("GLOBAL");
             const lbStub = c.env.LEADERBOARD.get(lbId);
             await lbStub.fetch('http://do/submit', {
                 method: 'POST',
-                body: JSON.stringify({ username: userId, wins: userData.wins_against_ai })
+                body: JSON.stringify({ username: userId, wins: userData.ai_score })
             });
         }
     } catch (e) { console.error('Failed to update stats', e); }
@@ -247,7 +250,7 @@ app.post('/onboarding/update', async (c) => {
 		if (taken) {
 			return c.json({ error: "Username already taken" }, 409);
 		}
-		
+
         const existing = await c.env.DB.prepare('SELECT * FROM users WHERE id=?').bind(userId).first();
         if (existing) {
             await c.env.DB.prepare('UPDATE users SET mc_name=? WHERE id=?').bind(mcName, userId).run();

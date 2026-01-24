@@ -11,37 +11,54 @@ import { OPPONENTS } from '../../src/constants';
 
 // --- SUB-COMPONENTS ---
 
-export const AppHeader = ({ user, isLoaded, identity, stats }) => (
-    <Stack align="center" gap="xl" mb={50} mt="lg">
-        <Stack gap={0} align="center">
-            <Title order={1} size={48} fw={900} variant="gradient" gradient={{ from: 'blue', to: 'cyan', deg: 90 }} style={{ letterSpacing: '-1px' }}>
-                RAP BATTLE BOT
-            </Title>
-            <Text c="dimmed" fw={500} size="lg">
-                {!isLoaded ? "Loading..." : (identity?.mc_name ? identity.mc_name : `MC ${user?.firstName || 'Guest'}`)}
-            </Text>
+export const AppHeader = ({ user, isLoaded, identity, stats }) => {
+    const avatarUrl = user ? `/avatar/${user.id}?t=${Date.now()}` : null;
+
+    return (
+        <Stack align="center" gap="xl" mb={30} mt="lg">
+            <Stack gap={0} align="center">
+                <Title order={1} size={48} fw={900} variant="gradient" gradient={{ from: 'blue', to: 'cyan', deg: 90 }} style={{ letterSpacing: '-1px' }}>
+                    RAP BATTLE BOT
+                </Title>
+                <Text c="dimmed" fw={500} size="lg">
+                    {!isLoaded ? "Loading..." : (identity?.mc_name ? identity.mc_name : `MC ${user?.firstName || 'Guest'}`)}
+                </Text>
+            </Stack>
+            <Group gap="md" p="xs" bg="gray.1" style={{ borderRadius: '50px', border: '1px solid #e9ecef', paddingRight: 6 }}>
+                {!isLoaded ? null : (
+                    <>
+                        <SignedOut>
+                            <SignInButton mode="modal">
+                                <Button radius="xl" variant="gradient" gradient={{ from: 'blue', to: 'cyan' }}>Sign In to Battle</Button>
+                            </SignInButton>
+                        </SignedOut>
+                        <SignedIn>
+                            {/* CUSTOM AVATAR DISPLAY */}
+                            <div style={{ width: 40, height: 40, borderRadius: '50%', overflow: 'hidden', border: '2px solid #228be6' }}>
+                                <img 
+                                    src={avatarUrl}
+                                    onError={(e) => { e.target.onerror = null; e.target.src = user?.imageUrl; }}
+                                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                    alt="User"
+                                />
+                            </div>
+
+                            {/* RANK (TEXT) INSTEAD OF NUMBER */}
+                            <Badge size="lg" variant="dot" color="blue" radius="sm" style={{ background: 'transparent', border: 'none' }}>
+                                Rank: {stats.rank || "Novice"}
+                            </Badge>
+                            
+                            <Divider orientation="vertical" />
+                            
+                            {/* SCORE SPLIT DISPLAY (Optional, keeps it clean) */}
+                             <Text size="xs" fw={700} c="dimmed">Wins: {stats.wins || 0}</Text>
+                        </SignedIn>
+                    </>
+                )}
+            </Group>
         </Stack>
-        <Group gap="md" p="xs" bg="gray.1" style={{ borderRadius: '50px', border: '1px solid #e9ecef' }}>
-            {!isLoaded ? null : (
-                <>
-                    <SignedOut>
-                        <SignInButton mode="modal">
-                            <Button radius="xl" variant="gradient" gradient={{ from: 'blue', to: 'cyan' }}>Sign In to Battle</Button>
-                        </SignInButton>
-                    </SignedOut>
-                    <SignedIn>
-                        <Badge size="lg" variant="dot" color="blue" radius="sm" style={{ background: 'transparent', border: 'none' }}>
-                            Rank: {stats.score}
-                        </Badge>
-                        <Divider orientation="vertical" />
-                        <Badge size="lg" variant="transparent" color="blue">Wins: {stats.wins}</Badge>
-                        <UserButton />
-                    </SignedIn>
-                </>
-            )}
-        </Group>
-    </Stack>
-);
+    );
+};
 
 export const WordDisplay = ({ word, onRefresh }) => (
     // ADDED: mx="auto" to center the card horizontally
@@ -255,7 +272,7 @@ export const ProfileView = ({ user, stats, identity, onUpdateProfile, uploading 
     const [imageTs, setImageTs] = React.useState(Date.now());
 
     // Force image refresh cache buster
-    const avatarUrl = `/avatar/${user.id}?t=${Date.now()}`;
+    const avatarUrl = user ? `/avatar/${user.id}?t=${Date.now()}` : null;
 
     // Calculate Win Rate
     const totalBattles = (stats.wins || 0) + (stats.losses || 0);

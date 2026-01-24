@@ -234,6 +234,7 @@ export class Challenge {
             const userId = this.env.USER_PROFILE.idFromName(winnerUsername);
             const userStub = this.env.USER_PROFILE.get(userId);
 
+            // 1. UDPATE PROFILE
             const userRes = await userStub.fetch('http://do/update', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -244,12 +245,13 @@ export class Challenge {
                 })
             });
             const userData = await userRes.json();
-            
+
+            // 2. SUBMIT TO PVP LEADERBOARD
             const id = this.env.LEADERBOARD.idFromName('GLOBAL_PVP');
             const stub = this.env.LEADERBOARD.get(id);
             await stub.fetch('http://do/submit', {
                 method: 'POST',
-                body: JSON.stringify({ username: winnerUsername, score: userData.score })
+                body: JSON.stringify({ username: winnerUsername, score: userData.pvp_score })
             });
             
         } catch (e) {
