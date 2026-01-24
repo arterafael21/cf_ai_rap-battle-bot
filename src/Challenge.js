@@ -89,6 +89,23 @@ export class Challenge {
 
         webSocket.addEventListener('close', () => {
             this.sessions = this.sessions.filter(s => s !== webSocket);
+
+            // check if p1 left
+            if (this.p1 && this.p1.socket === webSocket) {
+                this.p1 = null;
+                if (this.p2) {
+                    try {
+                        this.p2.socket.send(JSON.stringify({ type: 'OPPONENT_DISCONNECTED' }));
+                    } catch (e) {console.log('Failed to notify p2', e); }
+                } 
+            } else if (this.p2 && this.p2.socket === webSocket) {
+                this.p2 = null; // Wipe data
+                if (this.p1) {
+                    try { 
+                        this.p1.socket.send(JSON.stringify({ type: 'OPPONENT_DISCONNECTED' })); 
+            } catch(e) { console.log("Failed to notify p1", e); }
+        }
+    }
         });
     }
 

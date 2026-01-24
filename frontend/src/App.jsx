@@ -380,6 +380,14 @@ function RapBattleApp() {
 
         socket.onmessage = (event) => {
             const msg = JSON.parse(event.data);
+
+			if (msg.type === 'OPPONENT_DISCONNECTED') {
+				alert('Your opponent fled the battle! Match Ended (No Contest)');
+				if (ws.current) ws.current.close();
+				setMode('menu');
+				setStatus('Ready');
+				return;
+			}
             if (msg.type == 'WAITING_FOR_OPPONENT') setMode('waiting_for_opponent');
             if (msg.type === "VERSE_ACCEPTED") {
 				setStatus('Verse sent! Waiting for P2...');
