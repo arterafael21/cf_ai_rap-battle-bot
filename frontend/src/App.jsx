@@ -383,7 +383,19 @@ function RapBattleApp() {
               </Stack>
             </Card>
 
-            <Divider my="lg" label="Battle History" labelPosition="center" />
+            <Group align="center" mb="sm" mt="xl">
+				<Divider label="Battle History" labelPosition='center' style={{ flex: 1 }}/>
+				{history.length > 0 && (
+					<Button
+						variant="subtle"
+						color="red"
+						size="compact-xs"
+						onClick={clearHistory}
+						leftSection={<IconTrash size={12}/>}>
+							Clear
+					</Button>
+				)}
+			</Group>
 
             {history.map((item) => (
               <Card key={item.id} shadow="sm" padding="md" radius="md" withBorder mb="sm">
@@ -563,7 +575,7 @@ function RapBattleApp() {
 			{ mode === 'result' && duelResult && (
 				<Card shadow="sm" padding="xl" withBorder>
 					<Stack align="center">
-						<Title order={2}>Winnder: {duelResult.winner}</Title>
+						<Title order={2}>Winner: {duelResult.winner}</Title>
 
 						<Group gap="xl" mt="md">
 							<Stack align="center">
