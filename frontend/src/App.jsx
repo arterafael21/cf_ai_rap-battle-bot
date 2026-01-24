@@ -44,6 +44,7 @@ function RapBattleApp() {
     const [duelResult, setDuelResult] = useState(null); 
     const [battleMode, setBattleMode] = useState('text');
 	const [isQueuing, setIsQueuing] = useState(false);
+	const [myRole, setMyRole] = useState(null);
     
     // WORD CHALLENGE STATE
     const [targetWord, setTargetWord] = useState(''); 
@@ -124,7 +125,7 @@ function RapBattleApp() {
 		try {
 			// 1. Upload Image
 			if (newFile) {
-				const formData = new formData();
+				const formData = new FormData();
 				formData.append('image', newFile);
 				await fetch('/onboarding/upload', {
 					method: 'POST',
@@ -306,12 +307,12 @@ function RapBattleApp() {
         if (!input) return alert("Write a verse first!");
         const roomID = Math.random().toString(36).substring(2, 7);
         setBattleCode(roomID);
-        connectToWebSocket(roomID, 'CREATE', battleMode);
+        connectToBattleRoom(roomID, 'CREATE', input);
     };
   
     const joinMultiplayer = () => {
         if (!battleCode) return alert("Enter a code!");
-        connectToWebSocket(battleCode, 'JOIN');
+        connectToBattleRoom(battleCode, 'JOIN');
     };
 
 	const joinQueue = () => {
@@ -329,7 +330,7 @@ function RapBattleApp() {
 				setBattleCode(data.battleId);
 
 				// Automatically start the game with the assigned role
-				connectToWebSocket(data.battleId, data.role, battleMode);
+				connectToBattleRoom(data.battleId, data.role, battleMode);
 			}
 		};
 
@@ -343,7 +344,7 @@ function RapBattleApp() {
 		setStatus('Ready');
 	}
 
-    const connectToWebSocket = (roomID, action, selectedMode='text') => {
+    const connectToBattleRoom = (roomID, role, pendingVerse=null) => {
         if (ws.current) ws.current.close();
         setStatus('Connecting...');
         const socket = new WebSocket(`ws://127.0.0.1:8787/ws/battle/${roomID}`);
@@ -351,36 +352,47 @@ function RapBattleApp() {
 
         socket.onopen = async () => {
             console.log("WS Connected");
-            if (action == "CREATE") {
-                let audioData = null;
-                if (selectedMode === 'audio' && recordedBlob) audioData = await blobToBase64(recordedBlob);
-                socket.send(JSON.stringify({ 
-                    type: 'CREATE', 
-                    username: user?.firstName || 'Guest', 
-                    verse: input, 
-                    battleMode: selectedMode, 
-                    audioData: audioData, 
-                    mandatoryWord: wordMode ? targetWord : null
-                }));
-                setMode('create_success');
-            }
-            if (action === 'JOIN') {
-                socket.send(JSON.stringify({ type: 'JOIN', username: user?.firstName || 'Guest' }));
-            }
+			const myName = identity?.mc_name || user?.firstName || 'Guest';
+			socket.send(JSON.stringify({ type: 'INIT', username: myName, role: role }));
+
+            if (role == "CREATE") {
+				if (pendingVerse) {
+					setStatus('Sending Verse...');
+
+					let audioData = null;
+					if (battleMode === 'audio' && recordedBlob) {
+						audioData = await blobToBase64(recordedBlob);
+					}
+
+					socket.send(JSON.stringify({
+						type: 'SUBMIT_VERSE',
+						verse: pendingVerse,
+						audioData: audioData,
+						mandatoryWord: wordMode ? targetWord : null
+					}))
+				} else {
+					setMode('create');
+				}
+            } else {
+				setMode('waiting_for_opponent')
+			}
         };
 
         socket.onmessage = (event) => {
             const msg = JSON.parse(event.data);
-            if (msg.type == 'OPPONENT_JOINED') alert(`${msg.username} has entered the ring!`);
-            if (msg.type === "BATTLE_START") {
+            if (msg.type == 'WAITING_FOR_OPPONENT') setMode('waiting_for_opponent');
+            if (msg.type === "VERSE_ACCEPTED") {
+				setStatus('Verse sent! Waiting for P2...');
+				setMode('create_success');
+			}
+			if (msg.type === 'OPPONENT_JOINED') {
+				console.log("Opponent joined");
+			}
+			if (msg.type === "BATTLE_START") {
                 setP1Data({ name: msg.opponent, verse: msg.verse });
-                setBattleMode(msg.battleMode || 'text');
-                
-                if (msg.mandatoryWord) {
-                    setTargetWord(msg.mandatoryWord);
-                    setWordMode(true); // Auto-enable mode for P2 if word exists
-                }
-
+                if (msg.mandatoryWord) { setTargetWord(msg.mandatoryWord); setWordMode(true); }
+				setStatus('Ready');
+				setInput('');
                 setMode('fight');
                 if (msg.battleMode === 'audio') {
                     if (msg.audioData) { new Audio(msg.audioData).play().then(() => startTimer()); } 
@@ -392,12 +404,30 @@ function RapBattleApp() {
                 setDuelResult(msg.result);
                 setMode('result');
                 if (timerRef.current) clearInterval(timerRef.current);
-                if (battleMode === 'audio' && msg.result.p2_audio && user?.firstName !== msg.result.winner) new Audio(msg.result.p2_audio).play();
-                else if (battleMode === 'audio' && msg.result.p2_verse) playAudio(`p2-${Date.now()}`, msg.result.p2_verse, 'bytebeater');
+                const myName = identity?.mc_name || user?.firstName;
+                if (msg.result.p2_audio && myName !== msg.result.winner) new Audio(msg.result.p2_audio).play();
+                else if (msg.result.p2_verse) playAudio(`p2-${Date.now()}`, msg.result.p2_verse, 'bytebeater');
                 ws.current.close(); 
             }
         };
     };
+
+	// SUBMIT P1 VERSE (For Queue/Manual Create)
+    const submitP1Verse = async () => {
+        if (!input) return alert("Write something!");
+        let audioData = null;
+        if (battleMode === 'audio' && recordedBlob) audioData = await blobToBase64(recordedBlob);
+        
+        // This is the CRITICAL fix for "Infinite Load"
+        // We actually send the verse now
+        ws.current.send(JSON.stringify({
+            type: 'SUBMIT_VERSE',
+            verse: input,
+            audioData: audioData,
+            mandatoryWord: wordMode ? targetWord : null
+        }));
+        setStatus("Waiting for opponent...");
+    }
 
     const startTimer = () => {
         setTimer(30);
@@ -599,7 +629,7 @@ function RapBattleApp() {
 										<BattleInputArea 
 											input={input} setInput={setInput} 
 											isRecording={isRecording} toggleMic={toggleMic} 
-											handleSend={startMultiplayer} isLoading={isLoading} status={status} 
+											handleSend={battleCode ? submitP1Verse : startMultiplayer} isLoading={isLoading} status={status} 
 											placeholder={battleMode === 'audio' ? 'Press Record...' : 'Type your verse...'} 
 											readOnly={battleMode === 'audio'}
 										/>
@@ -651,6 +681,23 @@ function RapBattleApp() {
 								</Stack>
 							</Card>
 						)}
+
+						{mode === 'waiting_for_opponent' && (
+							<Card shadow="sm" padding="xl" withBorder>
+								<Stack align="center">
+									<Loader size="xl" type="dots" />
+									<Title order={3}>Waiting for Opponent...</Title>
+									<Text c="dimmed">Preparing the battle arena.</Text>
+									<Button variant="subtle" color="red" onClick={() => { 
+										if(ws.current) ws.current.close(); 
+										setMode('menu'); 
+									}}>
+										Cancel
+									</Button>
+								</Stack>
+							</Card>
+						)}
+
 					</Tabs.Panel>
 
 					<Tabs.Panel value="leaderboard" pt="md">

@@ -30,61 +30,39 @@ export class Challenge {
             try {
                 const event = JSON.parse(msg.data);
 
-                // --- CREATE ---
-                if (event.type === 'CREATE') {
-                    this.mandatoryWord = event.mandatoryWord;
-                    
-                    this.status = 'OPEN';
-                    this.finalResult = null;
-                    this.battleMode = event.battleMode || 'text';
-
-                    this.p1 = { 
-                        username: event.username, 
-                        verse: event.verse, 
-                        socket: webSocket,
-                        audioData: event.audioData || null
-                    };
-                    webSocket.send(JSON.stringify({ type: 'CREATED' }));
+                // -- INIT ---
+                if (event.type === 'INIT') {
+                    if (event.role === 'CREATE') {
+                        this.p1 = { username: event.username, socket: webSocket, verse: null };
+                    } else {
+                        this.p2 = { username: event.username, socket: webSocket}
+                        if (this.status === 'P1_READY') {
+                            this.sendBattleStartToP2();
+                        } else {
+                            webSocket.send(JSON.stringify({ type: 'WAITING_FOR_OPPONENT' }));
+                        }
+                    }
                 }
 
-                // --- JOIN ---
-                if (event.type === 'JOIN') {
-                    if (this.status === 'FINISHED') {
-                        webSocket.send(JSON.stringify({
-                            type: 'RESULT',
-                            result: this.finalResult,
-                            message: 'This battle has already ended'
-                        }));
-                        return;
-                    }
+                // --- P1 SUBMITS VERSE ---
+                if (event.type === 'SUBMIT_VERSE') {
+                    if (!this.p1) return;
+                    this.p1.verse = event.verse;
+                    this.p1.audioData = event.audioData;
+                    if (event.mandatoryWord) this.mandatoryWord = event.mandatoryWord;
 
-                    if (!this.p1) {
-                        webSocket.send(JSON.stringify({ type: 'ERROR', message: 'Battle not found' }));
-                        return;
-                    }
-                    this.p2 = { username: event.username, socket: webSocket };
+                    this.status = 'P1_READY';
+                    this.p1.socket.send(JSON.stringify({ type: 'VERSE_ACCEPTED' }));
 
-                    // Notify P1
-                    if (this.p1.socket.readyState === WebSocket.READY_STATE_OPEN) {
-                        this.p1.socket.send(JSON.stringify({
-                            type: 'OPPONENT_JOINED',
-                            username: this.p2.username
-                        }));
+                    if (this.p2) {
+                        this.sendBattleStartToP2();
+                        this.p1.socket.send(JSON.stringify({ type: 'OPPONENT_JOINED', username: this.p2.username }));
                     }
-
-                    // Start game for P2
-                    webSocket.send(JSON.stringify({
-                        type: 'BATTLE_START',
-                        opponent: this.p1.username,
-                        verse: this.p1.verse,
-                        battleMode: this.battleMode,
-                        audioData: this.p1.audioData,
-                        mandatoryWord: this.mandatoryWord // Send the shared word
-                    }));
                 }
 
                 // --- REPLY ---
                 if (event.type === 'REPLY') {
+                    if (!this.p2) return;
                     this.p2.verse = event.verse;
                     this.p2.audioData = event.audioData || null;
 
@@ -93,7 +71,6 @@ export class Challenge {
                     const result = await this.runJudge(this.p1, this.p2, this.mandatoryWord);
 
                     this.status = 'FINISHED';
-                    this.finalResult = result;
 
                     result.p1_verse = this.p1.verse;
                     result.p2_verse = this.p2.verse;
@@ -113,6 +90,17 @@ export class Challenge {
         webSocket.addEventListener('close', () => {
             this.sessions = this.sessions.filter(s => s !== webSocket);
         });
+    }
+
+    sendBattleStartToP2() {
+        if (!this.p2 || !this.p1) return;
+        this.p2.socket.send(JSON.stringify({
+            type: 'BATTLE_START',
+            opponent: this.p1.username,
+            verse: this.p1.verse,
+            audioData: this.p1.audioData,
+            mandatoryWord: this.mandatoryWord
+        }))
     }
 
     broadcast(message) {
@@ -137,7 +125,7 @@ export class Challenge {
             const scores = match ? JSON.parse(match[0]) : { p1_score: 5, p2_score: 5, comment: "AI Error" };
 
             const winnerName = scores.p1_score > scores.p2_score ? p1.username : p2.username;
-            const winnerCode = scores.p1_score > scores.p2_score ? 'p1_win' : 'p2_win'
+            const winnerCode = scores.p1_score > scores.p2_score ? 'p1_win' : 'p2_win';
 
             return { winner: winnerName, winnerCode, scores } 
         } catch (e) {

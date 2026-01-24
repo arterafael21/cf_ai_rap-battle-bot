@@ -25,7 +25,7 @@ export class Matchmaker {
         }
 
         // Handle disconnects (remove from queue)
-        scoket.addEventListener('close', () => {
+        socket.addEventListener('close', () => {
             this.sessions = this.sessions.filter(s => s !== socket)
         });
     }
@@ -39,10 +39,19 @@ export class Matchmaker {
         const battleId = crypto.randomUUID();
 
         // Assign roles
-        const msgP1 = JSON.stringify({ type: 'MATCH_FOUND', battleId, role: 'CREATE'});
-        const msgP2 = JSON.stringify({ type: 'MATCH_FOUND', battleId, role: 'JOIN'});
+        try {
+            const msgP1 = JSON.stringify({ type: 'MATCH_FOUND', battleId, role: 'CREATE'});
+            const msgP2 = JSON.stringify({ type: 'MATCH_FOUND', battleId, role: 'JOIN'});
 
-        try { p1.send(msgP1); p1.close(); } catch (e) {}
-        try { p2.send(msgP2); p2.close(); } catch (e) {}
+            p1.send(msgP1);
+            p2.send(msgP2);
+            
+        } catch (e) { console.error("Match send failed", e); }
+        
+
+        setTimeout(() => {
+            try { p1.close(); } catch (e) {}
+            try { p2.close(); } catch (e) {}
+        }, 100);
     }
 }

@@ -280,7 +280,7 @@ export const ProfileView = ({ user, stats, identity, onUpdateProfile, uploading 
                                     circle 
                                     size="lg" 
                                     color="blue" 
-                                    style={{ position: 'absolute', bottom: -5, right: -5 }}
+                                    style={{ position: 'absolute', bottom: 0, right: 0 }}
                                 >
                                     {stats.rank?.charAt(0) || 'N'}
                                 </Badge>
