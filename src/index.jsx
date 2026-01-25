@@ -155,11 +155,22 @@ app.post('/battle', async (c) => {
 
 		// 2. SUBMIT TO LEADERBOARD
         if (result === 'win' && userData.ai_score > 0) {
+            let displayName = "Unknown Rapper";
+            if (c.env.DB) {
+                const u = await c.env.DB.prepare('SELECT mc_name FROM users WHERE id = ?').bind(userId).first();
+                if (u && u.mc_name) displayName = u.mc_name;
+            }
+
             const lbId = c.env.LEADERBOARD.idFromName("GLOBAL");
             const lbStub = c.env.LEADERBOARD.get(lbId);
+
             await lbStub.fetch('http://do/submit', {
                 method: 'POST',
-                body: JSON.stringify({ username: userId, wins: userData.ai_score })
+                body: JSON.stringify({ 
+                    username: displayName,
+                    userId: userId, 
+                    wins: userData.ai_score 
+                })
             });
         }
     } catch (e) { console.error('Failed to update stats', e); }

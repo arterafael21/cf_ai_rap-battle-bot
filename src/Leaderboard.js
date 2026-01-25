@@ -22,16 +22,18 @@ export class Leaderboard extends DurableObject {
             let list = (await this.storage.get('leaders')) || [];
             
             // Remove existing entry for this user
-            list = list.filter(p => p.username !== username);
+            list = list.filter(p => p.userId !== userId &&p.username !== username);
             
             // Add new entry
-            list.push({ username, score });
+            if (username && username !== 'None') {
+                list.push({ username, score });
+            }
             
             // Sort by SCORE descending (Highest first)
             list.sort((a, b) => b.score - a.score);
             
-            // Keep Top 50
-            list = list.slice(0, 50);
+            // Keep Top 10
+            list = list.slice(0, 10);
             
             await this.storage.put('leaders', list);
             return new Response(JSON.stringify(list));

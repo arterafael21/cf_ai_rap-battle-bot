@@ -283,10 +283,14 @@ export class Challenge {
     async updateLeaderboard(winnerUsername) {
         if (!winnerUsername || winnerUsername === "Draw") return;
 
+        let winnerId = null;
+        if (this.p1 && this.p1.username === winnerUsername) winnerId = this.p1.userId;
+        else if (this.p2 && this.p2.username === winnerUsername) winnerId = this.p2.userId;
+
         try {
             const hasWordBonus = !!this.mandatoryWord;
-            const userId = this.env.USER_PROFILE.idFromName(winnerUsername);
-            const userStub = this.env.USER_PROFILE.get(userId);
+            const id = this.env.USER_PROFILE.idFromName(winnerUsername);
+            const userStub = this.env.USER_PROFILE.get(id);
 
             const userRes = await userStub.fetch('http://do/update', {
                 method: 'POST',
@@ -299,11 +303,15 @@ export class Challenge {
             });
             const userData = await userRes.json();
 
-            const id = this.env.LEADERBOARD.idFromName('GLOBAL_PVP');
-            const stub = this.env.LEADERBOARD.get(id);
+            const lbId = this.env.LEADERBOARD.idFromName('GLOBAL_PVP');
+            const lbStub = this.env.LEADERBOARD.get(lbId);
             await stub.fetch('http://do/submit', {
                 method: 'POST',
-                body: JSON.stringify({ username: winnerUsername, score: userData.pvp_score })
+                body: JSON.stringify({ 
+                    username: winnerUsername, 
+                    userId: winnerId,
+                    score: userData.pvp_score 
+                })
             });
             
         } catch (e) {
