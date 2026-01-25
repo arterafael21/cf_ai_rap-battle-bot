@@ -60,6 +60,7 @@ function RapBattleApp() {
 	const hasAutoSubmitted = useRef(false);
 	const [rounds, setRounds] = useState(1);
 	const matchStartTimer = useRef(null);
+	const chatEndRef = useRef(null);
     
     // WORD CHALLENGE STATE
     const [targetWord, setTargetWord] = useState(''); 
@@ -74,6 +75,10 @@ function RapBattleApp() {
     const audioChunks = useRef([]);
 	
     // INITIALIZATION
+	useEffect(() => {
+		chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+	}, [battleLog]);
+
 	useEffect(() => {
 		if (mode === 'result' && duelResult) {
 			// determine winner
@@ -319,12 +324,18 @@ function RapBattleApp() {
     };
 
     const shareReplay = () => {
-        let link = window.location.href;
-        if (duelResult?.battle_id && !link.includes('replay')) {
-            link = `${window.location.origin}${window.location.pathname}?replay=${duelResult.battle_id}`;
-        }
-        navigator.clipboard.writeText(link);
-        alert("Replay link copied!");
+        let origin = window.location.href;
+        const idToShare = duelResult?.battle_id ||  new URLSearchParams(window.location.search).get('replay');
+
+		if (!idToShare) return alert("No battle ID found to share");
+
+		const link = `${origin}/?replay=${idToShare}`;
+
+		navigator.clipboard.writeText(link).then(() => {
+			alert('Battle Link Copied! Share it with friends');
+		}).catch(err => {
+			prompt(err);
+		})
     };
 
     // SINGLE PLAYER BATTLE
@@ -518,6 +529,14 @@ function RapBattleApp() {
         socket.onmessage = (event) => {
             const msg = JSON.parse(event.data);
 
+			if (msg.type === 'ERROR') {
+				alert(msg.message);
+				setMode('menu');
+				ws.current.close();
+				setIsLoading(false);
+				return;
+			}
+
             if (msg.type === 'OPPONENT_JOINED') {
                 setP1Data({ name: msg.username, id: msg.userId });
             }
@@ -681,6 +700,18 @@ function RapBattleApp() {
         <>
             {/* --- 1. SIGNED OUT VIEW --- */}
             <SignedOut>
+				<Text c="dimmed" mt="md" ta="center" fs="italic">"{duelResult.scores.comment}"</Text>
+                                    
+				<Group mt="md" justify="center">
+					<Button variant="outline" leftSection={<IconShare size={16}/>} onClick={shareReplay}>Copy Link</Button>
+					
+					<SignInButton mode="modal">
+						<Button variant="gradient" gradient={{ from: 'blue', to: 'cyan' }} size="md">
+							Play Now
+						</Button>
+					</SignInButton>
+				</Group>
+
                 {mode === 'result' && duelResult ? (
                     <Container size="md" py="xl">
                         <Stack align="center">
@@ -1062,6 +1093,7 @@ function RapBattleApp() {
                                                         )}
                                                     </Group>
                                                 ))}
+												<div ref={chatEndRef}/>
                                             </Stack>
 
                                             <Divider />

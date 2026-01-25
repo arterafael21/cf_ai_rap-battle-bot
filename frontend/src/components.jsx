@@ -128,7 +128,13 @@ export const BattleInputArea = ({ input, setInput, isRecording, toggleMic, handl
             value={input} 
             onChange={(e) => setInput(e.currentTarget.value)}
             readOnly={readOnly}
-            styles={{ input: { fontSize: '16px', backgroundColor: '#f8f9fa' } }} 
+            styles={{ input: { fontSize: '16px', backgroundColor: '#f8f9fa' } }}
+            onKeyDown={(e) => {
+                if ((e.ctrlKey || e.metaKey) && e.key ==='Enter') {
+                    e.preventDefault();
+                    if (!isLoading) handleSend();
+                }
+            }} 
         />
         <Group justify="space-between" align="center" mt="md">
             <Button 

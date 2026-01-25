@@ -50,6 +50,11 @@ export class Challenge {
                         socket: webSocket
                     };
 
+                    // CHECK 1: Is the battle over?
+                    if (this.status === 'FINISHED' || this.status === 'ABANDONED') {
+                        webSocket.send(JSON.stringify({ type: 'ERROR', message: 'This battle is already over'}));
+                    }
+
                     if (event.role === 'CREATE') {
                         this.resetState();
                         this.p1 = player;
@@ -58,6 +63,17 @@ export class Challenge {
                             this.applySettings(event.settings);
                         }
                     } else {
+                        // CHECK 2: Does the room exist?
+                        if (!this.p1) {
+                            webSocket.send(JSON.stringify({ type: 'ERROR', message: 'Invalid Code. Room not found'}));
+                            webSocket.close();
+                            return;
+                        }
+
+                        // CHECK 3: Is the room full?
+                        if (this.p2) {
+                            webSocket.send(JSON.stringify({ type: 'ERROR', message: 'Room is full.'}))
+                        }
                         this.p2 = player;
                         if (this.p1) {
                             try {
