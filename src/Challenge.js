@@ -201,7 +201,9 @@ export class Challenge {
             mandatoryWord: this.mandatoryWord,
             rounds: this.rounds,
             turnTime: this.turnTime,
-            battleMode: this.battleMode
+            battleMode: this.battleMode,
+            p1Info: { username: this.p1.username, id: this.p1.userId },
+            p2Info: { username: this.p2.username, id: this.p2.userId }
         };
 
         this.currentTurnOwner = 'p1'; 

@@ -6,7 +6,7 @@ import {
 import { 
     IconMicrophone, IconMicrophoneOff, IconSend, IconPlayerPlay, IconBulb, IconRefresh, 
     IconUser, IconCamera, IconCheck, IconEdit, IconTrophy, IconChartBar, IconSwords, 
-    IconId, IconLogout, IconFlame, IconUsers, IconMusic 
+    IconId, IconLogout, IconFlame, IconUsers, IconMusic, IconClock, IconAlignLeft, IconKeyboard
 } from '@tabler/icons-react';
 import { SignedIn, SignedOut, SignInButton } from "@clerk/clerk-react";
 import { OPPONENTS } from '../../src/constants';
@@ -192,24 +192,44 @@ export const VerseDisplay = ({
     </Grid>
 );
 
-export const HistoryItem = ({ item, playAudio }) => (
-    <Card padding="lg" radius="md" withBorder mb="md">
-        <Group align="center" justify="space-between" mb="sm">
-            <Badge color={item.result === 'win' ? 'green' : 'red'} variant="light" size="sm">
-                {item.result === 'win' ? 'VICTORY' : 'DEFEAT'}
-            </Badge>
-            <Text size="xs" c="dimmed">{new Date(item.timestamp || Date.now()).toLocaleDateString()}</Text>
-        </Group>
+export const HistoryItem = ({ item, playAudio }) => {
+    // 1. SAFEGUARD: Determine the name regardless of data shape
+    let opponentName = "Unknown";
+    let opponentColor = "gray";
 
-        <VerseDisplay 
-            p1Verse={item.userRap}
-            p2Verse={item.aiVerse}
-            p1Title="YOU"
-            p2Title={item.opponent?.toUpperCase()}
-            onPlayAudio={() => playAudio(item.id, item.aiVerse, item.opponent)}
-        />
-    </Card>
-);
+    if (!item.opponent) {
+        // Case A: Data is missing entirely (Very old history)
+        opponentName = "Unknown";
+    } 
+    else if (typeof item.opponent === 'string') {
+        // Case B: Old History (Stored as just "RoboFlow")
+        opponentName = item.opponent;
+    } 
+    else if (item.opponent.name) {
+        // Case C: New History (Stored as Object { name: "RoboFlow", color: "blue" })
+        opponentName = item.opponent.name;
+        opponentColor = item.opponent.color || "gray";
+    }
+
+    return (
+        <Card padding="lg" radius="md" withBorder mb="md">
+            <Group align="center" justify="space-between" mb="sm">
+                <Badge color={item.result === 'win' ? 'green' : 'red'} variant="light" size="sm">
+                    {item.result === 'win' ? 'VICTORY' : 'DEFEAT'}
+                </Badge>
+                <Text size="xs" c="dimmed">{new Date(item.timestamp || Date.now()).toLocaleDateString()}</Text>
+            </Group>
+
+            <VerseDisplay 
+                p1Verse={item.userRap}
+                p2Verse={item.aiVerse}
+                p1Title="YOU"
+                p2Title={opponentName.toUpperCase()} // Now safe to uppercase
+                onPlayAudio={() => playAudio(item.id, item.aiVerse, opponentName)}
+            />
+        </Card>
+    );
+};
 
 export const OnboardingFlow = ({ name, setName, setFile, onSubmit, loading }) => {
     const [step, setStep] = React.useState(0);
@@ -436,3 +456,84 @@ export const SplashPage = () => (
         </Card>
     </Container>
 );
+
+export const PreBattleCard = ({ user, identity, opponent, config, avatarTs }) => {
+    // 1. Local State for Countdown
+    const [count, setCount] = React.useState(5);
+
+    React.useEffect(() => {
+        const timer = setInterval(() => {
+            setCount((prev) => (prev > 0 ? prev - 1 : 0));
+        }, 1000);
+        return () => clearInterval(timer);
+    }, []);
+
+    const myAvatar = `/avatar/${user.id}?t=${avatarTs}`;
+    const oppAvatar = opponent?.id ? `/avatar/${opponent.id}` : null;
+    
+    // FIX 1: Resolve P1 Name (MC Name > First Name > "You")
+    const myName = identity?.mc_name || user?.firstName || "You";
+
+    // FIX 2: Resolve P2 Name (Check both 'name' and 'username' properties to be safe)
+    const oppName = opponent?.name || opponent?.username || "Opponent";
+
+    return (
+        <Card shadow="xl" padding="xl" radius="lg" withBorder style={{ minHeight: 400, justifyContent: 'center' }}>
+            <Stack align="center" gap="xl">
+                
+                <Stack align="center" gap={5}>
+                    <Badge size="xl" variant="filled" color="red" className="pulsing-badge">BATTLE STARTING</Badge>
+                    <Title order={1} style={{ fontSize: 60, lineHeight: 1 }}>{count}</Title>
+                    <Text c="dimmed" size="sm">Entering the Arena...</Text>
+                </Stack>
+
+                <Group gap={40} align="center" justify="center" style={{ width: '100%' }}>
+                    
+                    {/* PLAYER 1 (YOU) */}
+                    <Stack align="center">
+                        <div style={{ position: 'relative' }}>
+                            <Avatar src={myAvatar} size={120} radius={120} style={{ border: '4px solid #228be6' }} />
+                            <Badge circle size="lg" color="blue" style={{ position: 'absolute', bottom: 0, right: 0 }}>P1</Badge>
+                        </div>
+                        {/* Use Resolved Name */}
+                        <Title order={3}>{myName}</Title>
+                        <Badge variant="light">READY</Badge>
+                    </Stack>
+
+                    <Stack align="center" gap="xs">
+                        <Title order={1} style={{ fontSize: 48, fontStyle: 'italic', color: '#fa5252' }}>VS</Title>
+                    </Stack>
+
+                    {/* PLAYER 2 (OPPONENT) */}
+                    <Stack align="center">
+                        <div style={{ position: 'relative' }}>
+                            <Avatar src={oppAvatar} size={120} radius={120} style={{ border: '4px solid #fa5252' }}>?</Avatar>
+                            <Badge circle size="lg" color="red" style={{ position: 'absolute', bottom: 0, right: 0 }}>P2</Badge>
+                        </div>
+                        {/* Use Resolved Name */}
+                        <Title order={3}>{oppName}</Title>
+                        <Badge variant="light" color="red">READY</Badge>
+                    </Stack>
+
+                </Group>
+
+                <Divider style={{ width: '100%' }} />
+
+                <Group gap="xl">
+                    <Group gap={5}><IconClock size={18} /><Text fw={700}>{config.turnTime}s Turns</Text></Group>
+                    <Group gap={5}><IconAlignLeft size={18} /><Text fw={700}>{config.rounds} Rounds</Text></Group>
+                    <Group gap={5}>
+                        {config.battleMode === 'audio' ? <IconMicrophone size={18}/> : <IconKeyboard size={18}/>}
+                        <Text fw={700} tt="capitalize">{config.battleMode} Mode</Text>
+                    </Group>
+                </Group>
+
+                {config.mandatoryWord && (
+                    <Card bg="yellow.1" withBorder style={{ borderColor: '#fcc419' }} p="xs" px="xl">
+                         <Text c="orange.9" fw={900}>⚠ MANDATORY WORD: "{config.mandatoryWord}"</Text>
+                    </Card>
+                )}
+            </Stack>
+        </Card>
+    );
+};

@@ -11,7 +11,7 @@ import { ClerkProvider, SignedIn, SignedOut, useUser, useAuth, useClerk } from "
 
 // IMPORTS
 import { getRandomWord } from '../../src/constants';
-import { AppHeader, WordDisplay, OpponentSelector, BattleInputArea, HistoryItem, OnboardingFlow, ProfileView, SplashPage, VerseDisplay } from './components';
+import { AppHeader, WordDisplay, OpponentSelector, BattleInputArea, HistoryItem, OnboardingFlow, ProfileView, SplashPage, VerseDisplay, PreBattleCard } from './components';
 
 const CLERK_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 if (!CLERK_KEY) throw new Error("Missing Publishable Key");
@@ -506,12 +506,21 @@ function RapBattleApp() {
             // --- START GAME ---
             if (msg.type === 'MATCH_START') {
                 setIsMyTurn(msg.yourTurn);
-                setBattleLog([]);
-                setTimeLeft(30);
+				const amIP1 = msg.p1Info.id === user.id;
+				const opponentInfo = amIP1 ? msg.p2Info : msg.p1Info;
+
 				if (msg.battleMode) setBattleMode(msg.battleMode);
-				if (msg.rounds) setRounds(msg.rounds);
+                if (msg.rounds) setRounds(msg.rounds);
                 if (msg.mandatoryWord) { setTargetWord(msg.mandatoryWord); setWordMode(true); }
-                setMode('arena');
+                
+				setMode('pre_battle');
+
+				setTimeout(() => {
+					setIsMyTurn(msg.yourTurn);
+					setBattleLog([]);
+					setTimeLeft(30);
+					setMode('arena');
+				}, 5000);
             }
 
             // --- RECEIVE TURN ---
@@ -913,6 +922,21 @@ function RapBattleApp() {
                                             </Button>
                                         </Stack>
                                     </Card>
+                                )}
+
+								{mode === 'pre_battle' && (
+                                    <PreBattleCard 
+                                        user={user}
+                                        identity={identity} // <--- ADD THIS PROP
+                                        opponent={p1Data} 
+                                        avatarTs={avatarTs}
+                                        config={{
+                                            rounds: rounds,
+                                            turnTime: 30, 
+                                            battleMode: battleMode,
+                                            mandatoryWord: wordMode ? targetWord : null
+                                        }}
+                                    />
                                 )}
 
                                 {mode === 'arena' && (
