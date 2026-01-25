@@ -164,7 +164,6 @@ export class Challenge {
                         round: Math.ceil((this.transcript.length + 1) / 2)
                     });
 
-                    // --- FIX: SEND ONLY TO OPPONENT AND SPECTATORS ---
                     const versePayload = JSON.stringify({
                         type: 'NEW_VERSE',
                         verse: finalVerseText,
@@ -233,18 +232,6 @@ export class Challenge {
                         // --- B. BATTLE CONTINUES ---
                         this.currentTurnOwner = isP1 ? 'p2' : 'p1';
                         this.turnStartTime = Date.now();
-
-                        const receiver = isP1 ? this.p2 : this.p1;
-
-                        // Send verse to opponent and tell them it's their turn
-                        if (receiver) {
-                            receiver.socket.send(JSON.stringify({
-                                type: 'NEW_VERSE',
-                                verse: finalVerseText, 
-                                audioData: event.audioData,
-                                isTranscribed: !!event.audioData
-                            }));
-                        }
                     }
                 }
 

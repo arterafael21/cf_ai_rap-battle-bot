@@ -331,10 +331,13 @@ function RapBattleApp() {
     };
 
     const shareReplay = () => {
-        let origin = window.location.href;
+        let origin = window.location.origin;
         const idToShare = duelResult?.battle_id || lastBattle?.battleId || new URLSearchParams(window.location.search).get('replay');
 
+		console.log("Sharing ID:", idToShare); 
+
 		if (!idToShare) return alert("No battle ID found to share");
+
 
 		const link = `${origin}/?replay=${idToShare}`;
 
@@ -394,7 +397,7 @@ function RapBattleApp() {
                 ...prev,
                 scores: judgeData.scores,
                 result: judgeData.result,
-                battleId: judgeData.battleId 
+                battleId: judgeData.battleId
             }));
 
 			setStatus('Ready');
