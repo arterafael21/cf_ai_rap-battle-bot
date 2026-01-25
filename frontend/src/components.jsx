@@ -158,7 +158,7 @@ export const VerseDisplay = ({
     onPlayAudio 
 }) => (
     <Grid>
-        <Grid.Col span={6}>
+        <Grid.Col span={{ base: 12, md: 6 }}>
             <Stack gap="xs" h="100%">
                 <Text size="xs" fw={700} c="dimmed">{p1Title}</Text>
                 <Card bg="blue.0" radius="md" p="sm" withBorder style={{ borderColor: '#d0ebff', flex: 1 }}>
@@ -169,7 +169,7 @@ export const VerseDisplay = ({
             </Stack>
         </Grid.Col>
         
-        <Grid.Col span={6}>
+        <Grid.Col span={{ base: 12, md: 6 }}>
             <Stack gap="xs" h="100%">
                 <Text size="xs" fw={700} c="dimmed">{p2Title}</Text>
                 <Card bg="red.0" radius="md" p="sm" withBorder style={{ borderColor: '#ffc9c9', flex: 1 }}>
@@ -396,9 +396,9 @@ export const ProfileView = ({ user, stats, identity, onUpdateProfile, uploading,
                     )}
                 </Card>
                 <Grid>
-                    <Grid.Col span={4}><Card withBorder radius="md" padding="lg" ta="center"><Text size="xs" tt="uppercase" fw={700} c="dimmed">Score</Text><Title order={2}>{stats.score || 0}</Title><IconTrophy size={24} color="gold" style={{ marginTop: 8 }} /></Card></Grid.Col>
-                    <Grid.Col span={4}><Card withBorder radius="md" padding="lg" ta="center"><Text size="xs" tt="uppercase" fw={700} c="dimmed">Win Rate</Text><Title order={2}>{winRate}%</Title><IconChartBar size={24} color="blue" style={{ marginTop: 8 }} /></Card></Grid.Col>
-                    <Grid.Col span={4}><Card withBorder radius="md" padding="lg" ta="center"><Text size="xs" tt="uppercase" fw={700} c="dimmed">Battles</Text><Title order={2}>{totalBattles}</Title><IconSwords size={24} color="red" style={{ marginTop: 8 }} /></Card></Grid.Col>
+                    <Grid.Col span={{ base: 12, md: 4 }}><Card withBorder radius="md" padding="lg" ta="center"><Text size="xs" tt="uppercase" fw={700} c="dimmed">Points</Text><Title order={2}>{stats.score || 0}</Title><IconTrophy size={24} color="gold" style={{ marginTop: 8 }} /></Card></Grid.Col>
+                    <Grid.Col span={{ base: 12, md: 4 }}><Card withBorder radius="md" padding="lg" ta="center"><Text size="xs" tt="uppercase" fw={700} c="dimmed">Win Rate</Text><Title order={2}>{winRate}%</Title><IconChartBar size={24} color="blue" style={{ marginTop: 8 }} /></Card></Grid.Col>
+                    <Grid.Col span={{ base: 12, md: 4 }}><Card withBorder radius="md" padding="lg" ta="center"><Text size="xs" tt="uppercase" fw={700} c="dimmed">Battles</Text><Title order={2}>{totalBattles}</Title><IconSwords size={24} color="red" style={{ marginTop: 8 }} /></Card></Grid.Col>
                 </Grid>
                 <Card withBorder radius="lg" padding="lg">
                     <Group mb="sm"><IconId color="gray" /><Title order={4}>AI Persona Analysis</Title></Group>
@@ -471,10 +471,8 @@ export const PreBattleCard = ({ user, identity, opponent, config, avatarTs }) =>
     const myAvatar = `/avatar/${user.id}?t=${avatarTs}`;
     const oppAvatar = opponent?.id ? `/avatar/${opponent.id}` : null;
     
-    // FIX 1: Resolve P1 Name (MC Name > First Name > "You")
     const myName = identity?.mc_name || user?.firstName || "You";
 
-    // FIX 2: Resolve P2 Name (Check both 'name' and 'username' properties to be safe)
     const oppName = opponent?.name || opponent?.username || "Opponent";
 
     return (
@@ -493,7 +491,7 @@ export const PreBattleCard = ({ user, identity, opponent, config, avatarTs }) =>
                     <Stack align="center">
                         <div style={{ position: 'relative' }}>
                             <Avatar src={myAvatar} size={120} radius={120} style={{ border: '4px solid #228be6' }} />
-                            <Badge circle size="lg" color="blue" style={{ position: 'absolute', bottom: 0, right: 0 }}>P1</Badge>
+                            <Badge circle size="lg" color="blue" style={{ position: 'absolute', bottom: 10, right: 3 }}>P1</Badge>
                         </div>
                         {/* Use Resolved Name */}
                         <Title order={3}>{myName}</Title>
@@ -508,7 +506,7 @@ export const PreBattleCard = ({ user, identity, opponent, config, avatarTs }) =>
                     <Stack align="center">
                         <div style={{ position: 'relative' }}>
                             <Avatar src={oppAvatar} size={120} radius={120} style={{ border: '4px solid #fa5252' }}>?</Avatar>
-                            <Badge circle size="lg" color="red" style={{ position: 'absolute', bottom: 0, right: 0 }}>P2</Badge>
+                            <Badge circle size="lg" color="red" style={{ position: 'absolute', bottom: 10, right: 3 }}>P2</Badge>
                         </div>
                         {/* Use Resolved Name */}
                         <Title order={3}>{oppName}</Title>

@@ -1,3 +1,4 @@
+import confetti from 'canvas-confetti';
 import React, { useState, useEffect, useRef } from 'react';
 import {
     MantineProvider, Container, Title, Card, Text, Button, Group, Badge, Stack, Grid, Loader, Tabs, Input, CopyButton, Divider, Center, SegmentedControl, Switch, rem, Modal, FileButton, TextInput, ActionIcon, Table, Avatar, Textarea, Skeleton
@@ -58,6 +59,7 @@ function RapBattleApp() {
     const [timeLeft, setTimeLeft] = useState(30); 
 	const hasAutoSubmitted = useRef(false);
 	const [rounds, setRounds] = useState(1);
+	const matchStartTimer = useRef(null);
     
     // WORD CHALLENGE STATE
     const [targetWord, setTargetWord] = useState(''); 
@@ -72,6 +74,22 @@ function RapBattleApp() {
     const audioChunks = useRef([]);
 	
     // INITIALIZATION
+	useEffect(() => {
+		if (mode === 'result' && duelResult) {
+			// determine winner
+			const amIP1 = duelResult.p1_name === (identity?.mc_name || user?.firstName);
+			const myWin = (amIP1 && duelResult.winnerCode === 'p1_win') || (!amIP1 && duelResult.winnerCode === 'p2_win');
+
+			if (duelResult.winner === (identity?.mc_name || user?.firstName)) {
+				confetti({
+					particleCount: 150,
+					spread: 70,
+					origin: { y: 0.6 }
+				});
+			}
+		}
+	}, [mode, duelResult]);
+
 	useEffect(() => {
 		if (mode === 'create_success' && ws.current && ws.current.readyState === WebSocket.OPEN) {
 			ws.current.send(JSON.stringify({
@@ -509,22 +527,24 @@ function RapBattleApp() {
                 setIsMyTurn(msg.yourTurn);
 				const amIP1 = msg.p1Info.id === user.id;
 				const opponentInfo = amIP1 ? msg.p2Info : msg.p1Info;
-
 				setP1Data({ name: opponentInfo.username, id: opponentInfo.id });
 
 				if (msg.battleMode) setBattleMode(msg.battleMode);
                 if (msg.rounds) setRounds(msg.rounds);
 				if (msg.turnTime) setTimeLeft(msg.turnTime);
                 if (msg.mandatoryWord) { setTargetWord(msg.mandatoryWord); setWordMode(true); }
-                
+
 				setMode('pre_battle');
 
-				setTimeout(() => {
-					setIsMyTurn(msg.yourTurn);
-					setBattleLog([]);
-					setTimeLeft(30);
-					setMode('arena');
-				}, 5000);
+				if (matchStartTimer.current) clearTimeout(matchStartTimer.current);
+                
+				matchStartTimer.current = setTimeout(() => {
+                    setIsMyTurn(msg.yourTurn);
+                    setBattleLog([]);
+                    // Ensure we use the turnTime from config, not just hardcoded 30
+                    setTimeLeft(msg.turnTime || 30); 
+                    setMode('arena');
+                }, 5000);
             }
 
             // --- RECEIVE TURN ---
@@ -559,8 +579,22 @@ function RapBattleApp() {
             }
 
             if (msg.type === 'OPPONENT_DISCONNECTED') {
-                alert("Opponent Left!");
-                setMode('menu');
+				if (matchStartTimer.current) clearTimeout(matchStartTimer.current);
+				alert("Opponent forfeited! You win by default");
+
+				setDuelResult({
+                    winner: "You (Default)",
+                    p1_verse: "Opponent fled the battle.",
+                    p2_verse: "VICTORY BY FORFEIT",
+                    scores: { 
+                        comment: "The opponent disconnected.",
+                        p1: { total: 10, rhyme: 0, flow: 0, bars: 0, aggression: 0 },
+                        p2: { total: 0, rhyme: 0, flow: 0, bars: 0, aggression: 0 }
+                    }
+                });
+
+                setMode('result');
+				ws.current.close();
             }
 
             if (msg.type === 'RESULT') {

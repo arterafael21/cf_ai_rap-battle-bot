@@ -22,6 +22,9 @@ export class Challenge {
     }
 
     async fetch (request) {
+        if (this.status === 'FINISHED' || this.status === 'ABANDONED') {
+            return new Response('This batlte is over.', { status: 403 });
+        }
         if (request.headers.get("Upgrade") === "websocket") {
             const pair = new WebSocketPair();
             const [client, server] = Object.values(pair);
@@ -74,7 +77,6 @@ export class Challenge {
                 }
 
                 // --- 2. SUBMIT TURN ---
-                // --- 2. SUBMIT TURN ---
                 if (event.type === 'SUBMIT_TURN') {
                     // 1. Check if we should even accept this turn
                     const totalTurnsNeeded = this.rounds * 2;
@@ -122,6 +124,10 @@ export class Challenge {
                     if (this.transcript.length >= totalTurnsNeeded) {
                         // --- A. BATTLE ENDED ---
                         this.status = 'JUDGING';
+
+                        this.broadcast({ type: 'RESULT', result });
+
+                        this.status = 'FINISHED';
                         this.currentTurnOwner = null;
 
                         // Send the final verse to the opponent so they can see it
@@ -172,10 +178,19 @@ export class Challenge {
 
         webSocket.addEventListener('close', () => {
             this.sessions = this.sessions.filter(s => s !== webSocket);
-            const other = (this.p1 && this.p1.socket === webSocket) ? this.p2 : this.p1;
-            if (other) {
-                try { other.socket.send(JSON.stringify({ type: 'OPPONENT_DISCONNECTED' })); } catch(e){}
-            }
+
+            const isP1 = (this.p1 && this.p1.socket === webSocket);
+            const isP2 = (this.p2 && this.p2.socket === webSocket);
+
+            if (isP1 || isP2) {
+                this.status = 'ABANDONED';
+                const other = isP1 ? this.p2 : this.p1;
+                if (other) {
+                    try { other.socket.send(JSON.stringify({ type: 'OPPONENT_DISCONNECTED' })); } catch(e){}
+                }
+                if (isP1) this.p1 = null;
+                if (isP2) this.p2 = null;
+            } 
         });
     }
 
@@ -226,7 +241,7 @@ export class Challenge {
         try {
             let battleText = transcript.map(t => {
                 const penaltyNote = t.isLate ? " [PENALTY: LATE]" : "";
-                return `MC ${t.username}: "${t.text}"${penaltyNote}`;
+                return `${t.username}: "${t.text}"${penaltyNote}`;
             }).join('\n');
 
             let wordInstructions = '';
