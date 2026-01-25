@@ -77,10 +77,11 @@ function RapBattleApp() {
 			ws.current.send(JSON.stringify({
 				type: 'UPDATE_SETTINGS',
 				rounds: parseInt(rounds),
-				battleMode: battleMode
+				battleMode: battleMode,
+				mandatoryWord: wordMode ? targetWord : null
 			}));
 		}
-	}, [rounds, battleMode, mode])
+	}, [rounds, battleMode, mode, targetWord])
     useEffect(() => {
         if (user) {
             fetchStats(user.id);
@@ -130,11 +131,6 @@ function RapBattleApp() {
 			playAudio(`msg-${Date.now()}`, log.text, 'bytebeater');
 		}
 	};
-	
-    // REFRESH WORD WHEN TOGGLE IS TURNED ON
-    useEffect(() => {
-        if (wordMode) refreshWord();
-    }, [wordMode]);
 
     const refreshWord = () => setTargetWord(getRandomWord());
 
@@ -671,7 +667,15 @@ function RapBattleApp() {
                                         <Stack gap="lg">
                                             <OpponentSelector current={opponent} setOpponent={setOpponent} />
                                             <Group justify="center">
-                                                <Switch label="Word Challenge" checked={wordMode} onChange={(e) => setWordMode(e.currentTarget.checked)} color="orange" size="md"/>
+                                                <Switch 
+													label="Word Challenge" 
+													checked={wordMode} 
+													onChange={(e) => {
+														const isOn = e.currentTarget.checked;
+														setWordMode(isOn); 
+														if (isOn) refreshWord();}}
+													size="md"
+												/>
                                             </Group>
                                             {wordMode && <WordDisplay word={targetWord} onRefresh={refreshWord} />}
                                             <Divider style={{ opacity: 0.5 }} />
@@ -815,7 +819,15 @@ function RapBattleApp() {
                                                 data={[{ label: 'Text Mode', value: 'text' }, { label: 'Audio Mode', value: 'audio' }]} 
                                             />
                                             
-                                            <Switch label="Word Challenge" checked={wordMode} onChange={(e) => setWordMode(e.currentTarget.checked)} />
+                                            <Switch 
+													label="Word Challenge" 
+													checked={wordMode} 
+													onChange={(e) => {
+														const isOn = e.currentTarget.checked;
+														setWordMode(isOn); 
+														if (isOn) refreshWord();}}
+													size="md"
+												/>
                                             <Button variant="subtle" color="red" onClick={() => { ws.current.close(); setMode('menu'); }}>Cancel</Button>
                                         </Stack>
                                     </Card>
