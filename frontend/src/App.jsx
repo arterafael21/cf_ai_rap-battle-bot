@@ -438,15 +438,27 @@ function RapBattleApp() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
                 text, 
-                character: character?.toLowerCase()
+                character: character
             }),
         });
+
+		if (!res.ok) {
+			const errData = await res.json();
+			throw new Error(errData.details || "Server failed to generate audio");
+		}
+
         const blob = await res.blob();
+        if (blob.size < 100) { 
+            throw new Error("Audio blob is too small/invalid");
+        }
+
         const url = URL.createObjectURL(blob);
         audioCache.current[battleId] = url;
-        new Audio(url).play();
+        
+        const audio = new Audio(url);
+        await audio.play();
         setStatus('Ready');
-    } catch (e) { console.error(e); setStatus('Audio Failed'); }
+    } catch (e) { console.error("TTS Frontend Error", e); setStatus('Audio Failed'); }
 };
 
     const toggleMic = async () => { isRecording ? stopRecording() : startRecording(); };
@@ -1039,7 +1051,7 @@ function RapBattleApp() {
                                             
                                             <Divider my="md" />
 
-                                            {/* SECTION 2: VERSES*/}
+                                            {/* SECTION 2: VERSES */}
                                             <VerseDisplay
                                                 p1Verse={lastBattle.userRap}
                                                 p2Verse={lastBattle.aiVerse}

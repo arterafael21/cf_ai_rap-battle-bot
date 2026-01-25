@@ -61,7 +61,7 @@ export const OPPONENTS = {
         FORMATTING:
         - EACH LINE MUST END IN A COMMA OR PERIOD to indicate breath control and flow.` 
     },
-    'pvp-default': {
+    'pvp': {
         voice: 'Odysseus'
     }
 };
