@@ -80,20 +80,40 @@ export const WordDisplay = ({ word, onRefresh }) => (
 );
 
 export const OpponentSelector = ({ current, setOpponent }) => (
-    <Stack gap={5}>
+    <Stack gap="sm">
         <Text ta="center" size="xs" fw={700} c="dimmed" tt="uppercase">Select Your Opponent</Text>
         <Group justify="center" gap="sm">
-            {Object.keys(OPPONENTS).map(key => (
-                <Button 
-                    key={key} 
-                    radius="md" size="sm"
-                    variant={current === key ? 'filled' : 'default'} 
-                    onClick={() => setOpponent(key)}
-                    color={current === key ? OPPONENTS[key].color : 'gray'}
-                >
-                    {OPPONENTS[key].name.toUpperCase()}
-                </Button>
-            ))}
+            {Object.keys(OPPONENTS).map(key => {
+                const bot = OPPONENTS[key];
+                const isSelected = current === key;
+                
+                return (
+                    <Stack gap={5} align="center" key={key}>
+                        <Button 
+                            key={key} 
+                            radius="md" 
+                            size="lg" // Make button larger to fit 2 lines
+                            variant={isSelected ? 'filled' : 'light'} 
+                            color={isSelected ? bot.color : 'gray'}
+                            onClick={() => setOpponent(key)}
+                            style={{ height: 'auto', padding: '12px 20px' }} // Auto height for stacking
+                        >
+                            <Text fw={900} size="sm" style={{ lineHeight: 1 }}>
+                                {bot.name.toUpperCase()}
+                            </Text>
+                        </Button>
+                            <Badge 
+                                size="xs" 
+                                variant='white'
+                                color={isSelected ? bot.color : 'gray'}
+                                style={{ opacity: 0.8 }}
+                            >
+                                {bot.level || 'Unknown'}
+                            </Badge>
+                    </Stack>
+                    
+                );
+            })}
         </Group>
     </Stack>
 );

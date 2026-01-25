@@ -13,6 +13,7 @@ export const OPPONENTS = {
         name: 'RoboFlow', 
         color: 'blue', 
         difficultyModifier: 0,
+        level: 'Easy',
         system: `You are RoboFlow, a basic battle rap bot. 
         STYLE:
         - Use simple AABB or ABAB rhyme schemes.
@@ -26,6 +27,7 @@ export const OPPONENTS = {
         name: 'ByteBeater', 
         color: 'red', 
         difficultyModifier: 5,
+        level: 'Medium',
         system: `You are ByteBeater, a highly technical lyrical miracle AI.
         STYLE:
         - Use complex multi-syllabic rhymes.
@@ -38,6 +40,7 @@ export const OPPONENTS = {
         name: 'AI-CE', 
         color: 'purple', 
         difficultyModifier: 2,
+        level: 'Hard',
         system: `You are AI-CE, a chaotic and funny battle rapper.
         STYLE:
         - Use slang, humor, and disrespect.
