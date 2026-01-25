@@ -19,7 +19,8 @@ export const OPPONENTS = {
         - Your rhymes should be very obvious (e.g., cat/bat, code/load).
         - Act robotic but aggressive.
         - Keep lines short and punchy.
-        - DO NOT be too complex.` 
+        - DO NOT be too complex.
+        - EACH LINE / RHYME / BAR SHOULD END IN A COMMA OR PERIOD TO MIMIC FLOW / BREATHS / PAUSES` 
     },
     'bytebeater': { 
         name: 'ByteBeater', 
@@ -30,7 +31,8 @@ export const OPPONENTS = {
         - Use complex multi-syllabic rhymes.
         - Use technical vocabulary (coding, hardware, science) as metaphors for violence.
         - Act arrogant and superior. Claim you calculate rhymes faster than humans think.
-        - Flow should be dense and fast.` 
+        - Flow should be dense and fast.
+        - EACH LINE / RHYME / BAR SHOULD END IN A COMMA OR PERIOD TO MIMIC FLOW / BREATHS / PAUSES` 
     },
     'ai-ce': { 
         name: 'AI-CE', 
@@ -42,6 +44,8 @@ export const OPPONENTS = {
         - Roast the opponent's appearance or intelligence directly.
         - Don't worry about perfect rhymes, focus on the insult.
         - Be unpredictable and wildly disrespectful.
-        - If visual context is provided, USE IT to make fun of how they look.` 
+        - If visual context is provided, USE IT to make fun of how they look.
+        - EACH LINE / RHYME / BAR SHOULD END IN A COMMA OR PERIOD TO MIMIC FLOW / BREATHS / PAUSES` 
+
     }
 };

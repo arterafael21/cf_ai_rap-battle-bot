@@ -3,7 +3,8 @@ import {
     MantineProvider, Container, Title, Card, Text, Button, Group, Badge, Stack, Grid, Loader, Tabs, Input, CopyButton, Divider, Center, SegmentedControl, Switch, rem, Modal, FileButton, TextInput, ActionIcon, Table, Avatar, Textarea
 } from '@mantine/core';
 import { 
-    IconMicrophone, IconMicrophoneOff, IconTrophy, IconSwords, IconUsers, IconSearch, IconArrowLeft, IconShare, IconKeyboard, IconMusic, IconUserCircle, IconEdit, IconSend, IconPlayerPlay
+    IconMicrophone, IconMicrophoneOff, IconTrophy, IconSwords, IconUsers, IconSearch, IconArrowLeft, IconShare, IconKeyboard, IconMusic, IconUserCircle, IconEdit, IconSend, IconPlayerPlay,
+	IconNumber4Small
 } from '@tabler/icons-react';
 import '@mantine/core/styles.css';
 import { ClerkProvider, SignedIn, SignedOut, useUser, useAuth, useClerk } from "@clerk/clerk-react";
@@ -427,7 +428,7 @@ function RapBattleApp() {
 				setBattleCode(data.battleId);
 
 				// Automatically start the game with the assigned role
-				connectToBattleRoom(data.battleId, data.role, battleMode);
+				connectToBattleRoom(data.battleId, data.role, data.config);
 			}
 		};
 
@@ -441,7 +442,7 @@ function RapBattleApp() {
 		setStatus('Ready');
 	}
 
-    const connectToBattleRoom = (roomID, role) => {
+    const connectToBattleRoom = (roomID, role, settings=IconNumber4Small) => {
         if (ws.current) ws.current.close();
         setStatus('Connecting...');
         const socket = new WebSocket(`ws://127.0.0.1:8787/ws/battle/${roomID}`);
@@ -450,7 +451,11 @@ function RapBattleApp() {
         socket.onopen = async () => {
             const myName = identity?.mc_name || user?.firstName || 'Guest';
             socket.send(JSON.stringify({ 
-                type: 'INIT', username: myName, userId: user.id, role: role 
+                type: 'INIT', 
+				username: myName, 
+				userId: user.id, 
+				role: role,
+				settings: settings
             }));
 
             if (role === 'CREATE') {
@@ -484,13 +489,25 @@ function RapBattleApp() {
                 // Add opponent verse to log
                 setBattleLog(prev => [...prev, { sender: 'opponent', text: msg.verse, audio: msg.audioData }]);
                 
-                // My Turn Now
-                setIsMyTurn(true);
+				const currentVerses = battleLog.length + 1;
+				const maxVerses = rounds * 2;
 
-				setTimeLeft(30);
-				setTurnCount(prev => prev + 1);
-				hasAutoSubmitted.current = false;
+				if (currentVerses < maxVerses) {
+					setIsMyTurn(true);
+					setTimeLeft(30);
+					setTurnCount(prev => prev + 1);
+					hasAutoSubmitted.current = false;
+				} else {
+					setIsMyTurn(false);
+					setStatus('Battle Finished. Judges are looking...')
+				}
             }
+
+			if (msg.type === 'JUDGING') {
+				setMode('judging...');
+				setStatus("Judging in progress...");
+				setIsMyTurn(false);
+			}
 
             if (msg.type === 'OPPONENT_TYPING') {
                 setIsOpponentTyping(true);
@@ -958,6 +975,37 @@ function RapBattleApp() {
                                                     </Group>
                                                 </Card>
                                             )}
+                                        </Stack>
+                                    </Card>
+                                )}
+
+								{mode === 'judging...' && (
+                                    <Card shadow="sm" padding="xl" withBorder>
+                                        <Stack align="center" gap="xl" py="xl">
+                                            {/* Animated Bars Loader */}
+                                            <Loader size="xl" type="bars" color="orange" />
+                                            
+                                            <Stack align="center" gap={5}>
+                                                <Title order={2}>Judges Deliberating</Title>
+                                                <Text c="dimmed" fs="italic">Analyzing rhymes, flow, and aggression...</Text>
+                                            </Stack>
+
+                                            <Card bg="gray.0" p="md" radius="md" style={{ width: '100%' }}>
+                                                <Stack gap="xs">
+                                                    <Group justify="space-between">
+                                                        <Text size="sm">Rhyme Scheme</Text>
+                                                        <Loader size="xs" type="dots" />
+                                                    </Group>
+                                                    <Group justify="space-between">
+                                                        <Text size="sm">Flow Check</Text>
+                                                        <Loader size="xs" type="dots" />
+                                                    </Group>
+                                                    <Group justify="space-between">
+                                                        <Text size="sm">Roast Detection</Text>
+                                                        <Loader size="xs" type="dots" />
+                                                    </Group>
+                                                </Stack>
+                                            </Card>
                                         </Stack>
                                     </Card>
                                 )}
