@@ -205,7 +205,7 @@ export class Challenge {
                 3. Bars (Punchlines/Creativity)
                 4. Aggression (Direct attacks)
 
-                RETURN JSON ONLY:
+                RETURN JSON STRUCTURE ONLY, NO OTEHR TEXT EXCEPT JSON:
                 {
                     "p1_score": number,
                     "p2_score": number,
@@ -218,9 +218,15 @@ export class Challenge {
                 messages: [{ role: 'user', content: prompt }]
             });
 
+            console.log("--- [DEBUG] RAW AI RESPONSE ---");
+            console.log(res.response);
+
             const match = res.response.match(/\{[\s\S]*\}/);
             if (!match) throw new Error("Invalid JSON");
             const data = JSON.parse(match[0]);
+
+            console.log("--- [DEBUG] EXTRACTED STRING ---");
+            console.log(match[0]);
 
             return {
                 winner: data.winner,

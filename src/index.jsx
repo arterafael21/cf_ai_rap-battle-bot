@@ -52,14 +52,18 @@ app.post('/battle', async (c) => {
         try {
             const userRow = await c.env.DB.prepare('SELECT roast_context FROM users WHERE id = ?').bind(userId).first();
             if (userRow && userRow.roast_context) {
-                visualContext = `\nVISUAL CONTEXT FOR ROASTING: The user looks like this: "${userRow.roast_context}". USE THIS TO ROAST THEM.`;
+                visualContext = `\nVISUAL CONTEXT: The opponent is a HUMAN who looks like: "${userRow.roast_context}". Roast their appearance.`;
             } else {
-				visualContext = `\nVISUAL CONTEXT: The user has NO profile photo. OPTIONAL: Mock them for being anonymous or scared to show their face.`;
-			}
+                visualContext = `\nVISUAL CONTEXT: The opponent is a HUMAN. They have no profile picture, so roast them for being anonymous.`;
+            }
         } catch(e) { console.log("DB Roast Fetch Error", e); }
     }
 
-    const systemPrompt = opponentConfig.system + visualContext;
+    const systemPrompt = `
+        ${opponentConfig.system}
+        ${visualContext}
+        CRITICAL INSTRUCTION: You are battling a REAL HUMAN. Do NOT call them a bot, AI, or computer. Treat them as an opponent in a rap battle.
+    `;
 
     // AI RAPPER
     const rapperRes = await c.env.AI.run('@cf/meta/llama-3-8b-instruct', {
@@ -71,36 +75,49 @@ app.post('/battle', async (c) => {
     const aiVerse = rapperRes.response;
 
 	let judgeSystemPrompt = `
-		You are a strict rap battle judge.
-		RUBRIC (Score 0-40 total):
-		1. Rhymes (1-10): Multis get high scores, simple rhymes get low.
-		2. Flow (1-10): Rhythm and readability.
-		3. Roasts (1-10): Direct insults vs generic filler.
-		4. Creativity (1-10): Wordplay and metaphors.
-		
-		RETURN JSON ONLY, nothing else: { "user": { "rhyme": 5, "flow": 5, "roast": 5, "creativity": 5, "word_bonus": 0 }, "ai": { "rhyme": 5, ... }, "comment": "..." }
+        Act as a professional Battle Rap Judge.
+        
+        TRANSCRIPT:
+        User (Human): "${userRap}"
+        Opponent (AI): "${aiVerse}"
+
+        RUBRIC (Score 0-10 each):
+        1. Rhymes (Multis/Complexity)
+        2. Flow (Rhythm/Readability)
+        3. Roasts (Direct Insults)
+        4. Creativity (Wordplay)
+
+        MANDATORY FORMAT:
+        Return ONLY valid JSON. 
+        Do not use markdown.
+        Escape all double quotes inside the "comment" string (e.g. "He said \\"hello\\"").
+        
+        Example Output:
+        {
+            "user": { "rhyme": 5, "flow": 5, "insults": 5, "creativity": 5, "word_bonus": 0 },
+            "ai": { "rhyme": 5, "flow": 5, "insults": 5, "creativity": 5 },
+            "comment": "The user had good bars but the AI flowed better."
+        }
     `;
 
     // Only add mandatory rule if it is NOT null
     if (mandatoryWord && mandatoryWord !== 'NONE') {
         judgeSystemPrompt += ` 
-			MANDATORY RULE: Check if they used the word "${mandatoryWord}". 
-			If used, set "word_bonus": 10. If not, 0.
+            RULE: Check if USER used the word "${mandatoryWord}". 
+            If yes, set "user.word_bonus": 10. If no, 0.
         `;   
     }
 
     // AI JUDGE
     const judgeRes = await c.env.AI.run('@cf/meta/llama-3-8b-instruct', {
-        messages: [
-			{ role: 'system', content: judgeSystemPrompt },
-			{ role: 'user', content: `User: "${userRap}"\nAI: "${aiVerse}"`}
-        ]
+        messages: [{ role: 'user', content: judgeSystemPrompt }]
     });
 
     let scores = { user: { total: 0 }, ai: { total: 0 }, comment: "Judging Error" };
 
     try {
         const raw = judgeRes.response;
+        console.log("RAW JUDGE OUTPUT:", raw);
         const jsonMatch = raw.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
             const parsed = JSON.parse(jsonMatch[0]);
@@ -112,7 +129,13 @@ app.post('/battle', async (c) => {
             
             scores.ai.total += opponentConfig.difficultyModifier;
         }
-    } catch (e) { console.error('Judge Error', e); }
+    } catch (e) { 
+        console.error('Judge Parse Error', e);
+        // Fallback so app doesn't crash
+        scores.comment = "The judge is drunk (AI Error). Defaulting to Draw.";
+        scores.user.total = 20;
+        scores.ai.total = 20;
+    }
 
     const result = scores.user.total > scores.ai.total ? "win" : "loss";
     

@@ -673,6 +673,8 @@ function RapBattleApp() {
                                                 <Title order={4}>Last Round Results</Title>
                                                 <Badge color={lastBattle.result === 'win' ? 'green' : 'red'} size="lg">{lastBattle.result.toUpperCase()}</Badge>
                                             </Group>
+
+											{/* SCOREBOARD */}
                                             <Grid>
                                                 <Grid.Col span={6}>
                                                     <Card bg="white" withBorder>
@@ -692,10 +694,40 @@ function RapBattleApp() {
                                             <Text size="sm" mt="md" fs="italic" c="dimmed" ta="center">"{lastBattle.scores.comment}"</Text>
                                             
                                             <Divider my="md" />
+
+											{/* VERSES DISPLAY */}
                                             
-                                            <Text size="xs" fw={700} c="dimmed">AI VERSE:</Text>
-                                            <Text style={{ whiteSpace: 'pre-line', fontStyle: 'italic' }}>"{lastBattle.aiVerse}"</Text>
-                                            <Button variant="subtle" size="xs" mt="xs" leftSection={<IconMusic size={14}/>} onClick={() => playAudio('last-battle', lastBattle.aiVerse, opponent)}>Play Audio</Button>
+                                            <Grid>
+                                                <Grid.Col span={6}>
+                                                    <Stack gap="xs">
+                                                        <Text size="xs" fw={700} c="dimmed">YOUR VERSE</Text>
+                                                        <Card bg="blue.0" radius="md" p="sm" withBorder style={{ borderColor: '#d0ebff' }}>
+                                                            <Text size="sm" style={{ whiteSpace: 'pre-line', fontStyle: 'italic', color: '#333' }}>
+                                                                "{lastBattle.userRap}"
+                                                            </Text>
+                                                        </Card>
+                                                    </Stack>
+                                                </Grid.Col>
+                                                
+                                                <Grid.Col span={6}>
+                                                    <Stack gap="xs">
+                                                        <Text size="xs" fw={700} c="dimmed">AI RESPONSE</Text>
+                                                        <Card bg="red.0" radius="md" p="sm" withBorder style={{ borderColor: '#ffc9c9' }}>
+                                                            <Text size="sm" style={{ whiteSpace: 'pre-line', fontStyle: 'italic', color: '#333' }}>
+                                                                "{lastBattle.aiVerse}"
+                                                            </Text>
+                                                        </Card>
+                                                        <Button 
+                                                            variant="subtle" 
+                                                            size="xs" 
+                                                            leftSection={<IconMusic size={14}/>} 
+                                                            onClick={() => playAudio('last-battle', lastBattle.aiVerse, opponent)}
+                                                        >
+                                                            Play Audio
+                                                        </Button>
+                                                    </Stack>
+                                                </Grid.Col>
+                                            </Grid>
                                         </Card>
                                     )}
                                 </Container>
