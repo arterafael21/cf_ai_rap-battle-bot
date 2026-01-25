@@ -10,8 +10,9 @@
 	"compatibility_flags": [
 		"nodejs_compat"
 	],
-	"observability": {
-		"enabled": true
+	"assets": {
+		"directory": "./frontend/dist",
+		"binding": "ASSETS"
 	},
 	"ai": {
 		"binding": "AI"
@@ -25,11 +26,16 @@
 		]
 	},
 	"migrations": [
-		{ "tag": "v1", "new_classes": [ "UserProfile" ] },
-		{ "tag": "v2", "new_classes": [ "Leaderboard" ] },
-		{ "tag": "v3", "new_classes": [ "Challenge" ] },
-		{ "tag": "v4", "new_classes": [ "Matchmaker" ] }
-	],
+        {
+            "tag": "v1",
+            "new_sqlite_classes": [
+                "UserProfile",
+                "Leaderboard",
+                "Challenge",
+                "Matchmaker"
+            ]
+        }
+    ],
 	"d1_databases": [
 		{
 			"binding": "DB",
@@ -37,12 +43,6 @@
 			"database_id": "52ff179e-73e9-4570-ad25-4f98a0cc6502"
 		}
 	],
-	"r2_buckets": [
-		{
-			"bucket_name": "rap-battle-avatars",
-			"binding": "rap_battle_avatars"
-		}
-	]
 	/**
 	 * Smart Placement
 	 * https://developers.cloudflare.com/workers/configuration/smart-placement/#smart-placement

@@ -401,7 +401,12 @@ function RapBattleApp() {
             }));
 
 			setStatus('Ready');
-			saveHistory({ ...genData, ...judgeData, id: `battle-${Date.now()}` });
+			saveHistory({ 
+				...genData, 
+				...judgeData, 
+				id: `battle-${Date.now()}`,
+				myPoints: judgeData.pointsEarned
+			});
 			if (wordMode) refreshWord();
 			fetchLeaderboard();
         } catch (e) { 
@@ -653,6 +658,16 @@ function RapBattleApp() {
                 setDuelResult(msg.result);
                 setMode('result');
 				setShowVoting(false);
+				
+				if (user) {
+					fetchStats(user.id);
+				}
+
+				saveHistory({
+					...msg.result,
+					timestamp: Date.now(),
+					myPoints: msg.result.pointsEarned
+				})
                 ws.current.close();
             }
         };
@@ -737,16 +752,6 @@ function RapBattleApp() {
                 {duelResult?.scores?.comment && (
                     <Text c="dimmed" mt="md" ta="center" fs="italic">"{duelResult.scores.comment}"</Text>
                 )}
-                                    
-                <Group mt="md" justify="center">
-                    <Button variant="outline" leftSection={<IconShare size={16}/>} onClick={shareReplay}>Copy Link</Button>
-                    
-                    <SignInButton mode="modal">
-                        <Button variant="gradient" gradient={{ from: 'blue', to: 'cyan' }} size="md">
-                            Play Now
-                        </Button>
-                    </SignInButton>
-                </Group>
 
                 {mode === 'result' && duelResult ? (
                     <Container size="md" py="xl">
@@ -1359,11 +1364,16 @@ function RapBattleApp() {
                                     
                                     <Container size="sm" style={{ width: '100%' }}>
                                         <Divider label={<Badge variant="outline">Full Battle History</Badge>} labelPosition="center" mb="lg" />
-                                        {history.length === 0 ? <Text c="dimmed" ta="center">No battles recorded yet.</Text> : (
-                                            <Stack gap="md">
-                                                {history.map((item) => <HistoryItem key={item.id} item={item} playAudio={playAudio} />)}
-                                            </Stack>
-                                        )}
+										<Stack gap="md">
+											{history.map((item) => (
+												<HistoryItem 
+													key={item.id} 
+													item={item} 
+													playAudio={playAudio} 
+													identity={identity} // <--- CRITICAL: Do not forget this!
+												/>
+											))}
+										</Stack>
                                         {history.length > 0 && <Center mt="md"><Button variant="subtle" color="red" onClick={clearHistory}>Clear History</Button></Center>}
                                     </Container>
                                 </Stack>

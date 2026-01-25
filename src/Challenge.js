@@ -211,15 +211,25 @@ export class Challenge {
                         }
 
                         // Determine Winner
+                        let pointsEarned = 0; // Default 0
+                        const wordBonus = this.mandatoryWord ? 10 : 0;
+
                         if (aiResult.scores.p1.total > aiResult.scores.p2.total) {
                             aiResult.winner = this.p1.username;
                             aiResult.winnerCode = 'p1_win';
+                            // Calculate points for P1
+                            if (this.p1.username) pointsEarned = 20 + wordBonus;
                         } else if (aiResult.scores.p2.total > aiResult.scores.p1.total) {
                             aiResult.winner = this.p2.username;
                             aiResult.winnerCode = 'p2_win';
+                            // Calculate points for P2
+                            if (this.p2.username) pointsEarned = 20 + wordBonus;
                         } else {
                             aiResult.winner = "Draw";
+                            pointsEarned = 5; // Give 5 points for a draw? (Optional)
                         }
+
+                        aiResult.pointsEarned = pointsEarned;
 
                         const savedID = await this.saveBattleToDB(aiResult);
                         aiResult.battle_id = savedID;

@@ -50,7 +50,7 @@ app.post('/battle/generate', async (c) => {
     if (c.env.DB) {
         try {
             const userRow = await c.env.DB.prepare('SELECT roast_context FROM users WHERE id = ?').bind(userId).first();
-            if (userRow && userRow.roast_context) {
+            if (userRow && userRow.roast_context && Math.random() < 0.4) {
                 visualContext = `\nVISUAL CONTEXT: The opponent is a HUMAN who looks like: "${userRow.roast_context}". Roast their appearance.`;
             }
         } catch(e) {}
@@ -172,16 +172,16 @@ app.post('/battle/judge', async (c) => {
             const id = c.env.USER_PROFILE.idFromName(uId);
             const stub = c.env.USER_PROFILE.get(id);
             const pointsValue = (opponent && opponent.points) ? opponent.points : 10;
+
+            const earnedWordBonus = scores.user.word_bonus > 0 ? 10 : 0;
             
             // 1. Update Personal Profile
             const userUpdateRes = await stub.fetch('http://do/update', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ result, type: 'ai', hasWordBonus: scores.user.word_bonus > 0, pointsValue })
+                body: JSON.stringify({ result, type: 'ai', hasWordBonus: earnedWordBonus > 0, pointsValue })
             });
-            
-            const userData = await userUpdateRes.json();
-            
+                        
             // 2. Update Leaderboard (Add Points Earned)
             if (result === 'win') {
                 let displayName = "Unknown";
@@ -206,8 +206,12 @@ app.post('/battle/judge', async (c) => {
     };
 
     c.executionCtx.waitUntil(updateTask(userId));
-    
-    return c.json({ result, scores });
+    const earnedWordBonus = scores.user.word_bonus > 0 ? 10 : 0;
+    const pointsValue = (opponent && opponent.points) ? opponent.points : 10;
+    const frontendPoints = result === 'win' ? (pointsValue + earnedWordBonus) : 0;
+
+    // Return pointsEarned so Frontend can save it to history
+    return c.json({ result, scores, battleId, pointsEarned: frontendPoints });
 });
 
 app.post('/transcribe', async (c) => {

@@ -22,7 +22,7 @@ export class Leaderboard extends DurableObject {
             let list = (await this.storage.get('leaders')) || [];
 
             // check if user exists
-            const existingUser = list.findIndex(p => p.userId === userId || p.username === username);
+            const existingIndex = list.findIndex(p => p.userId === userId || p.username === username);
             
             if (existingIndex !== -1) {
                 // ACCUMULATE POINTS
