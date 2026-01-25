@@ -144,12 +144,13 @@ app.post('/battle', async (c) => {
         const id = c.env.USER_PROFILE.idFromName(userId);
         const stub = c.env.USER_PROFILE.get(id);
 		const hasWordBonus = scores.user.word_bonus > 0;
+        const potentialPoints = opponentConfig.points || 0;
 
 		// 1. UPDATE PROFILE
         const userUpdateRes = await stub.fetch('http://do/update', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ result: result, type: 'ai', hasWordBonus: hasWordBonus })
+            body: JSON.stringify({ result: result, type: 'ai', hasWordBonus: hasWordBonus, pointsValue: potentialPoints })
         });
         const userData = await userUpdateRes.json();
 
@@ -302,13 +303,9 @@ app.post('/onboarding/update', async (c) => {
 // --- ONBOARDING: UPLOAD IMAGE ---
 app.post('/onboarding/upload', async (c) => {
     let userId;
-    try { 
-        userId = await verifyAuth(c); 
-    } catch (e) { 
-        return c.json({ error: e.message }, 401); 
-    }
+    try { userId = await verifyAuth(c); } 
+    catch (e) { return c.json({ error: e.message }, 401); }
 
-    // 1. CRITICAL: Use parseBody() for Multipart Form Data (Images)
     const formData = await c.req.parseBody();
     const imageFile = formData['image'];
 
@@ -316,39 +313,62 @@ app.post('/onboarding/upload', async (c) => {
         return c.json({ error: 'No valid image provided' }, 400);
     }
 
+    // 1. Prepare Image Data
+    let base64String = '';
+    let bytes = null;
+
     try {
         const arrayBuffer = await imageFile.arrayBuffer();
-        
-        // 2. Size Check (D1 has a 1MB limit per row by default)
         if (arrayBuffer.byteLength > 1024 * 1024) {
             return c.json({ error: 'Image too large. Max 1MB.' }, 400);
         }
-
-        const bytes = new Uint8Array(arrayBuffer);
-        
-        // 3. Convert to Base64 for DB Storage
+        bytes = new Uint8Array(arrayBuffer);
         let binary = '';
         for (let i = 0; i < bytes.byteLength; i++) {
             binary += String.fromCharCode(bytes[i]);
         }
-        const base64String = `data:${imageFile.type};base64,${btoa(binary)}`;
+        base64String = `data:${imageFile.type};base64,${btoa(binary)}`;
+    } catch (e) {
+        return c.json({ error: "Failed to process image file" }, 500);
+    }
 
-        // 4. Save to Database
+    // 2. Generate Description (Safe Mode)
+    let description = "A mysterious rapper hiding their face.";
+    
+    try {
+        const input = {
+            image: [...bytes],
+            prompt: "Describe the person in this image in one sentence. Focus on their appearance (hair, glasses, clothing, expression) so I can roast them later. Be brief.",
+            max_tokens: 100
+        };
+        const aiRes = await c.env.AI.run('@cf/llava-hf/llava-1.5-7b-hf', input);
+        if (aiRes && aiRes.description) {
+            description = aiRes.description;
+        }
+    } catch (aiError) {
+        console.error("AI Generation Failed (Non-fatal):", aiError);
+        // We continue anyway so the image still saves!
+    }
+
+    // 3. Save to D1 Database
+    try {
         const query = `
-            INSERT INTO users (id, avatar_base64, created_at) 
-            VALUES (?, ?, ?) 
-            ON CONFLICT(id) DO UPDATE SET avatar_base64 = excluded.avatar_base64
+            INSERT INTO users (id, avatar_base64, roast_context, created_at) 
+            VALUES (?, ?, ?, ?) 
+            ON CONFLICT(id) DO UPDATE SET 
+                avatar_base64 = excluded.avatar_base64,
+                roast_context = excluded.roast_context
         `;
         
         await c.env.DB.prepare(query)
-            .bind(userId, base64String, Date.now())
+            .bind(userId, base64String, description, Date.now())
             .run();
 
-        return c.json({ success: true });
+        return c.json({ success: true, description: description });
 
-    } catch (e) {
-        console.error("Upload Logic Error:", e.message);
-        return c.json({ error: "Failed to process image: " + e.message }, 500);
+    } catch (dbError) {
+        console.error("Database Save Failed:", dbError);
+        return c.json({ error: "Database error: " + dbError.message }, 500);
     }
 });
 
@@ -358,7 +378,7 @@ app.get('/ws/queue', async (c) => {
 	return stub.fetch(c.req.raw);
 });
 
-app.get('/avatar/:userId', async (c) => {
+app.get('Id', async (c) => {
 	const userId = c.req.param('userId');
 	if (!c.env.AVATAR_BUCKET) return c.text('No Bucket', 500);
 
@@ -413,6 +433,38 @@ app.get('/admin/nuke', async (c) => {
         return c.json({ error: e.message }, 500);
     }
 });
+
+app.get('/avatar/:userId', async (c) => {
+    const userId = c.req.param('userId');
+    if (!c.env.DB) return c.text('No DB', 500);
+
+    try {
+        const user = await c.env.DB.prepare('SELECT avatar_base64 FROM users WHERE id=?').bind(userId).first();
+
+        if (!user || !user.avatar_base64) {
+            return c.text('No avatar', 404);
+        }
+
+        const matches = user.avatar_base64.match(/^data:(.*);base64,(.+)$/);
+        if (!matches || matches.length !== 3) return c.text('Invalid Data', 500);
+
+        const contentType = matches[1];
+        const b64Data = matches[2];
+        const binaryStr = atob(b64Data);
+        const len = binaryStr.length;
+        const bytes = new Uint8Array(len);
+        for (let i = 0; i < len; i++) bytes[i] = binaryStr.charCodeAt(i);
+
+        return new Response(bytes.buffer, {
+            headers: {
+                'Content-Type': contentType,
+                'Cache-Control': 'public, max-age=60', // Cache for 60s
+            }
+        });
+    } catch (e) {
+        return c.text('Error fetching avatar', 500);
+    }
+})
 
 export default app;
 export { UserProfile, Leaderboard, Challenge, Matchmaker };

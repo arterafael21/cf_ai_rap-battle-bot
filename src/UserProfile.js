@@ -17,8 +17,8 @@ app.get('/stats', async (c) => {
         pvp_losses: 0,
         pvp_score: 0,
         rank: 'Novice',
-        style: 'Freestyle',
     };
+    stats.score = (stats.ai_score || 0) + (stats.pvp_score || 0);
     return c.json(stats);
 });
 
@@ -36,14 +36,16 @@ app.post('/update', async (c) => {
     // 1. CALCULATE POINTS
     let pointsChange = 0;
 
+    const baseWinValue = pointsChange || 10;
+
     if (result === 'win') {
         // Base points
         if (type === 'pvp') {
             stats.pvp_wins = (stats.pvp_wins || 0) + 1;
-            pointsChange += 25;
+            pointsChange += 30; // high reward for beating human
         } else {
             stats.ai_wins = (stats.ai_wins || 0) + 1;
-            pointsChange += 10;
+            pointsChange += baseWinValue; // variable reward based on Bot Difficulty
         }
 
         // Bonus
@@ -55,7 +57,6 @@ app.post('/update', async (c) => {
         } else {
             stats.ai_losses = (stats.ai_losses || 0) + 1;
         }
-        pointsChange -= 5;
     }
     
     // 2. UPDATE SPECIFIC SCORE

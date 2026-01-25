@@ -14,7 +14,7 @@ import { OPPONENTS } from '../../src/constants';
 // --- SUB-COMPONENTS ---
 
 export const AppHeader = ({ user, isLoaded, identity, stats, avatarTs, onLogout }) => {
-    const avatarUrl = user ? `/avatar/${user.id}` : null;
+    const avatarUrl = user ? `/avatar/${user.id}?t=${avatarTs}` : null;
 
     return (
         <Stack align="center" gap="xl" mb={30} mt="lg">
@@ -55,7 +55,9 @@ export const AppHeader = ({ user, isLoaded, identity, stats, avatarTs, onLogout 
                                 Rank: {stats.rank || "Novice"}
                             </Badge>
                             <Divider orientation="vertical" />
-                            <Text size="xs" fw={700} c="dimmed">Wins: {stats.wins || 0}</Text>
+                            <Text size="xs" fw={700} c="dimmed">
+                                {stats.score !== undefined ? `${stats.score} PTS` : '0 PTS'}
+                            </Text>
                         </SignedIn>
                     </>
                 )}
@@ -336,9 +338,10 @@ export const ProfileView = ({ user, stats, identity, onUpdateProfile, uploading,
                         <Group>
                             <div style={{ position: 'relative' }}>
                                 <img 
+                                    key={avatarTs}
                                     src={preview || avatarUrl} 
                                     onError={(e) => { 
-                                        if (!preview) { e.target.onerror = null; e.target.src = user.imageUrl; }
+                                        if (!preview && user?.imageUrl) { e.target.onerror = null; e.target.src = user.imageUrl; }
                                     }} 
                                     alt="Profile" 
                                     style={{ width: 100, height: 100, borderRadius: '50%', border: '4px solid #228be6', objectFit: 'cover' }} 

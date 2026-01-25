@@ -697,18 +697,38 @@ function RapBattleApp() {
 
 											{/* SCOREBOARD */}
                                             <Grid>
+                                                {/* USER SCORE CARD */}
                                                 <Grid.Col span={6}>
-                                                    <Card bg="white" withBorder>
+                                                    <Card bg="white" withBorder h="100%">
                                                         <Text size="xs" c="dimmed" fw={700}>YOU ({identity?.mc_name || 'User'})</Text>
                                                         <Title order={2} c="blue">{lastBattle.scores.user.total}</Title>
-                                                        <Text size="xs" mt={5}>Rhyme: {lastBattle.scores.user.rhyme} | Flow: {lastBattle.scores.user.flow}</Text>
+                                                        
+                                                        {/* DETAILED BREAKDOWN */}
+                                                        <Stack gap={2} mt={5}>
+                                                            <Group justify="space-between"><Text size="xs">Rhyme:</Text><Text size="xs" fw={700}>{lastBattle.scores.user.rhyme}</Text></Group>
+                                                            <Group justify="space-between"><Text size="xs">Flow:</Text><Text size="xs" fw={700}>{lastBattle.scores.user.flow}</Text></Group>
+                                                            <Group justify="space-between"><Text size="xs">Roasts:</Text><Text size="xs" fw={700}>{lastBattle.scores.user.insults}</Text></Group>
+                                                            <Group justify="space-between"><Text size="xs">Creative:</Text><Text size="xs" fw={700}>{lastBattle.scores.user.creativity}</Text></Group>
+                                                            {lastBattle.scores.user.word_bonus > 0 && (
+                                                                <Group justify="space-between"><Text size="xs" c="orange" fw={700}>Word Bonus:</Text><Text size="xs" c="orange" fw={700}>+10</Text></Group>
+                                                            )}
+                                                        </Stack>
                                                     </Card>
                                                 </Grid.Col>
+
+                                                {/* AI SCORE CARD */}
                                                 <Grid.Col span={6}>
-                                                    <Card bg="white" withBorder>
+                                                    <Card bg="white" withBorder h="100%">
                                                         <Text size="xs" c="dimmed" fw={700}>{lastBattle.opponent.toUpperCase()}</Text>
                                                         <Title order={2} c="red">{lastBattle.scores.ai.total}</Title>
-                                                        <Text size="xs" mt={5}>Rhyme: {lastBattle.scores.ai.rhyme} | Flow: {lastBattle.scores.ai.flow}</Text>
+                                                        
+                                                        <Stack gap={2} mt={5}>
+                                                            <Group justify="space-between"><Text size="xs">Rhyme:</Text><Text size="xs" fw={700}>{lastBattle.scores.ai.rhyme}</Text></Group>
+                                                            <Group justify="space-between"><Text size="xs">Flow:</Text><Text size="xs" fw={700}>{lastBattle.scores.ai.flow}</Text></Group>
+                                                            <Group justify="space-between"><Text size="xs">Roasts:</Text><Text size="xs" fw={700}>{lastBattle.scores.ai.insults}</Text></Group>
+                                                            <Group justify="space-between"><Text size="xs">Creative:</Text><Text size="xs" fw={700}>{lastBattle.scores.ai.creativity}</Text></Group>
+                                                            {/* AI doesn't get word bonus */}
+                                                        </Stack>
                                                     </Card>
                                                 </Grid.Col>
                                             </Grid>
@@ -1000,11 +1020,37 @@ function RapBattleApp() {
 
                                 {mode === 'result' && duelResult && (
                                     <Card shadow="sm" padding="xl" withBorder>
-                                        <Stack align="center"><Title order={2}>Winner: {duelResult.winner}</Title>
-                                        <Grid style={{ width: '100%' }} gutter="lg"><Grid.Col span={6}><Card bg="blue.1" padding="sm" radius="md"><Text size="xs" fw={700} c="dimmed">PLAYER 1</Text><Text size="sm" style={{ fontStyle: 'italic', whiteSpace: 'pre-line' }}>"{duelResult.p1_verse}"</Text></Card></Grid.Col><Grid.Col span={6}><Card bg="red.1" padding="sm" radius="md"><Text size="xs" fw={700} c="dimmed">PLAYER 2</Text><Text size="sm" style={{ fontStyle: 'italic', whiteSpace: 'pre-line' }}>"{duelResult.p2_verse}"</Text></Card></Grid.Col></Grid>
-                                        <Group gap="xl" mt="md"><Stack align="center"><Text fw={700}>P1 Score</Text><Badge size="xl" color={duelResult.winnerCode === 'p1_win' ? 'green' : 'grey'}>{duelResult.scores.p1_score}</Badge></Stack><Title order={3}>VS</Title><Stack align="center"><Text fw={700}>P2 Score</Text><Badge size="xl" color={duelResult.winnerCode === 'p2_win' ? 'green' : 'gray'}>{duelResult.scores.p2_score}</Badge></Stack></Group>
-                                        <Text c="dimmed" mt="md" ta="center">"{duelResult.scores.comment}"</Text><Button mt="lg" onClick={() => { setMode("menu"); setInput(''); }}>Back to Menu</Button>
-                                        {window.location.search.includes('replay') && (<Button variant="light" leftSection={<IconShare size={16}/>} onClick={shareReplay}>Share Replay</Button>)}
+                                        <Stack align="center">
+                                            <Title order={2}>Winner: {duelResult.winner}</Title>
+                                            
+                                            {/* UPDATED: Uses the standardized component now */}
+                                            <div style={{ width: '100%' }}>
+                                                <VerseDisplay 
+                                                    p1Verse={duelResult.p1_verse}
+                                                    p2Verse={duelResult.p2_verse}
+                                                    p1Title="PLAYER 1"
+                                                    p2Title="PLAYER 2"
+                                                />
+                                            </div>
+
+                                            <Group gap="xl" mt="md">
+                                                <Stack align="center">
+                                                    <Text fw={700}>P1 Score</Text>
+                                                    <Badge size="xl" color={duelResult.winnerCode === 'p1_win' ? 'green' : 'gray'}>{duelResult.scores.p1_score}</Badge>
+                                                </Stack>
+                                                <Title order={3}>VS</Title>
+                                                <Stack align="center">
+                                                    <Text fw={700}>P2 Score</Text>
+                                                    <Badge size="xl" color={duelResult.winnerCode === 'p2_win' ? 'green' : 'gray'}>{duelResult.scores.p2_score}</Badge>
+                                                </Stack>
+                                            </Group>
+                                            
+                                            <Text c="dimmed" mt="md" ta="center">"{duelResult.scores.comment}"</Text>
+                                            <Button mt="lg" onClick={() => { setMode("menu"); setInput(''); }}>Back to Menu</Button>
+                                            
+                                            {window.location.search.includes('replay') && (
+                                                <Button variant="light" leftSection={<IconShare size={16}/>} onClick={shareReplay}>Share Replay</Button>
+                                            )}
                                         </Stack>
                                     </Card>
                                 )}
