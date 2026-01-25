@@ -11,7 +11,7 @@ import { ClerkProvider, SignedIn, SignedOut, useUser, useAuth, useClerk } from "
 
 // IMPORTS
 import { getRandomWord } from '../../src/constants';
-import { AppHeader, WordDisplay, OpponentSelector, BattleInputArea, HistoryItem, OnboardingFlow, ProfileView, SplashPage } from './components';
+import { AppHeader, WordDisplay, OpponentSelector, BattleInputArea, HistoryItem, OnboardingFlow, ProfileView, SplashPage, VerseDisplay } from './components';
 
 const CLERK_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 if (!CLERK_KEY) throw new Error("Missing Publishable Key");
@@ -714,37 +714,13 @@ function RapBattleApp() {
 
 											{/* VERSES DISPLAY */}
                                             
-                                            <Grid>
-                                                <Grid.Col span={6}>
-                                                    <Stack gap="xs">
-                                                        <Text size="xs" fw={700} c="dimmed">YOUR VERSE</Text>
-                                                        <Card bg="blue.0" radius="md" p="sm" withBorder style={{ borderColor: '#d0ebff' }}>
-                                                            <Text size="sm" style={{ whiteSpace: 'pre-line', fontStyle: 'italic', color: '#333' }}>
-                                                                "{lastBattle.userRap}"
-                                                            </Text>
-                                                        </Card>
-                                                    </Stack>
-                                                </Grid.Col>
-                                                
-                                                <Grid.Col span={6}>
-                                                    <Stack gap="xs">
-                                                        <Text size="xs" fw={700} c="dimmed">AI RESPONSE</Text>
-                                                        <Card bg="red.0" radius="md" p="sm" withBorder style={{ borderColor: '#ffc9c9' }}>
-                                                            <Text size="sm" style={{ whiteSpace: 'pre-line', fontStyle: 'italic', color: '#333' }}>
-                                                                "{lastBattle.aiVerse}"
-                                                            </Text>
-                                                        </Card>
-                                                        <Button 
-                                                            variant="subtle" 
-                                                            size="xs" 
-                                                            leftSection={<IconMusic size={14}/>} 
-                                                            onClick={() => playAudio('last-battle', lastBattle.aiVerse, opponent)}
-                                                        >
-                                                            Play Audio
-                                                        </Button>
-                                                    </Stack>
-                                                </Grid.Col>
-                                            </Grid>
+                                            <VerseDisplay
+												p1Verse={lastBattle.userRap}
+                                                p2Verse={lastBattle.aiVerse}
+                                                p1Title="YOUR VERSE"
+                                                p2Title="AI RESPONSE"
+                                                onPlayAudio={() => playAudio('last-battle', lastBattle.aiVerse, opponent)}
+											/>
                                         </Card>
                                     )}
                                 </Container>

@@ -6,7 +6,7 @@ import {
 import { 
     IconMicrophone, IconMicrophoneOff, IconSend, IconPlayerPlay, IconBulb, IconRefresh, 
     IconUser, IconCamera, IconCheck, IconEdit, IconTrophy, IconChartBar, IconSwords, 
-    IconId, IconLogout, IconFlame, IconUsers
+    IconId, IconLogout, IconFlame, IconUsers, IconMusic 
 } from '@tabler/icons-react';
 import { SignedIn, SignedOut, SignInButton } from "@clerk/clerk-react";
 import { OPPONENTS } from '../../src/constants';
@@ -128,6 +128,48 @@ export const BattleInputArea = ({ input, setInput, isRecording, toggleMic, handl
     </>
 );
 
+export const VerseDisplay = ({ 
+    p1Verse, 
+    p2Verse, 
+    p1Title = "YOUR VERSE", 
+    p2Title = "OPPONENT", 
+    onPlayAudio 
+}) => (
+    <Grid>
+        <Grid.Col span={6}>
+            <Stack gap="xs" h="100%">
+                <Text size="xs" fw={700} c="dimmed">{p1Title}</Text>
+                <Card bg="blue.0" radius="md" p="sm" withBorder style={{ borderColor: '#d0ebff', flex: 1 }}>
+                    <Text size="sm" style={{ whiteSpace: 'pre-line', fontStyle: 'italic', color: '#333' }}>
+                        "{p1Verse}"
+                    </Text>
+                </Card>
+            </Stack>
+        </Grid.Col>
+        
+        <Grid.Col span={6}>
+            <Stack gap="xs" h="100%">
+                <Text size="xs" fw={700} c="dimmed">{p2Title}</Text>
+                <Card bg="red.0" radius="md" p="sm" withBorder style={{ borderColor: '#ffc9c9', flex: 1 }}>
+                    <Text size="sm" style={{ whiteSpace: 'pre-line', fontStyle: 'italic', color: '#333' }}>
+                        "{p2Verse}"
+                    </Text>
+                </Card>
+                {onPlayAudio && (
+                    <Button 
+                        variant="subtle" 
+                        size="xs" 
+                        leftSection={<IconMusic size={14}/>} 
+                        onClick={onPlayAudio}
+                    >
+                        Play Audio
+                    </Button>
+                )}
+            </Stack>
+        </Grid.Col>
+    </Grid>
+);
+
 export const HistoryItem = ({ item, playAudio }) => (
     <Card padding="lg" radius="md" withBorder mb="md">
         <Group align="center" justify="space-between" mb="sm">
@@ -136,25 +178,14 @@ export const HistoryItem = ({ item, playAudio }) => (
             </Badge>
             <Text size="xs" c="dimmed">{new Date(item.timestamp || Date.now()).toLocaleDateString()}</Text>
         </Group>
-        <Grid gutter="lg" align="stretch">
-            <Grid.Col span={6}>
-                <Text size="xs" fw={700} c="blue" mb={5}>YOU</Text>
-                <Text size="sm" style={{ lineHeight: 1.6, whiteSpace: 'pre-line', fontStyle: 'italic', color: '#495057' }}>
-                    "{item.userRap}"
-                </Text>
-            </Grid.Col>
-            <Grid.Col span={6} style={{ borderLeft: '1px solid #f8f9fa' }} pl="lg">
-                <Group justify="space-between" mb={5}>
-                    <Text size="xs" fw={700} c="pink">{item.opponent?.toUpperCase()}</Text>
-                    <ActionIcon size="sm" variant="subtle" color="gray" onClick={() => playAudio(item.id, item.aiVerse, item.opponent)}>
-                        <IconPlayerPlay size={14} />
-                    </ActionIcon>
-                </Group>
-                <Text size="sm" style={{ whiteSpace: 'pre-line', lineHeight: 1.6, fontStyle: 'italic', color: '#495057' }}>
-                    "{item.aiVerse}"
-                </Text>
-            </Grid.Col>
-        </Grid>
+
+        <VerseDisplay 
+            p1Verse={item.userRap}
+            p2Verse={item.aiVerse}
+            p1Title="YOU"
+            p2Title={item.opponent?.toUpperCase()}
+            onPlayAudio={() => playAudio(item.id, item.aiVerse, item.opponent)}
+        />
     </Card>
 );
 
