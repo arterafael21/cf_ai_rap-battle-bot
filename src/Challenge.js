@@ -396,46 +396,51 @@ export class Challenge {
         }
     }
     
-    async updateLeaderboard(winnerUsername) {
-        if (!winnerUsername || winnerUsername === "Draw") return;
+    // Inside Challenge.js -> updateLeaderboard(winnerUsername, resultData)
 
-        let winnerId = null;
-        if (this.p1 && this.p1.username === winnerUsername) winnerId = this.p1.userId;
-        else if (this.p2 && this.p2.username === winnerUsername) winnerId = this.p2.userId;
+async updateLeaderboard(winnerUsername, resultData) {
+    if (!winnerUsername || winnerUsername === "Draw") return;
 
-        try {
-            // Calculate PvP Points (Base 30 + their actual rap score)
-            const winnerScore = this.p1.username === winnerUsername 
-                ? resultData.scores.p1.total 
-                : resultData.scores.p2.total
-            
-            const totalPvPPoints = 30 + (winnerScore || 0);
+    let winnerId = null;
+    if (this.p1 && this.p1.username === winnerUsername) winnerId = this.p1.userId;
+    else if (this.p2 && this.p2.username === winnerUsername) winnerId = this.p2.userId;
 
-            const id = this.env.USER_PROFILE.idFromName(winnerId);
-            const userStub = this.env.USER_PROFILE.get(id);
+    try {
+        // 1. CALCULATE PERFORMANCE POINTS
+        const p1Score = resultData.scores.p1.total || 0;
+        const p2Score = resultData.scores.p2.total || 0;
+        const winBonus = 30; // PvP Win Base
+        const wordBonus = this.mandatoryWord ? 10 : 0;
 
-            await userStub.fetch('http://do/update', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    result: 'win',
-                    type: 'pvp',
-                    pointsValue: totalPvPPoints
-                })
-            });
+        // Calculate total earned for the winner
+        const totalPvPPoints = winBonus + (winnerId === this.p1.userId ? p1Score : p2Score) + wordBonus;
 
-            // Update Global PvP Leaderboard
-            const lbId = this.env.LEADERBOARD.idFromName('GLOBAL_PVP');
-            await this.env.LEADERBOARD.get(lbId).fetch('http://do/submit', {
-                method: 'POST',
-                body: JSON.stringify({ 
-                    username: winnerUsername, 
-                    userId: winnerId,
-                    score: totalPvPPoints 
-                })
-            });
-        } catch (e) { console.error("PvP Update Failed", e); }
-    }
+        // 2. UPDATE PERSONAL PROFILE 
+        const id = this.env.USER_PROFILE.idFromName(winnerId);
+        const userStub = this.env.USER_PROFILE.get(id);
+
+        await userStub.fetch('http://do/update', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                result: 'win',
+                type: 'pvp',
+                pointsValue: totalPvPPoints 
+            })
+        });
+
+        // 3. UPDATE GLOBAL PVP LEADERBOARD
+        const lbId = this.env.LEADERBOARD.idFromName('GLOBAL_PVP');
+        await this.env.LEADERBOARD.get(lbId).fetch('http://do/submit', {
+            method: 'POST',
+            body: JSON.stringify({ 
+                username: winnerUsername, 
+                userId: winnerId,
+                score: totalPvPPoints 
+            })
+        });
+    } catch (e) { console.error("PvP Update Failed", e); }
+}
 
     async saveBattleToDB(result) {
         if (!this.env.DB) return null;

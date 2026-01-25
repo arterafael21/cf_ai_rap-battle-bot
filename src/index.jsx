@@ -113,7 +113,7 @@ app.post('/battle/judge', async (c) => {
     `;
 
     if (mandatoryWord && mandatoryWord !== 'NONE') {
-        judgeSystemPrompt += ` RULE: Check if USER used the word "${mandatoryWord}" inside the <user_verse> tags. If yes, set "user.word_bonus": 10.`;
+        judgeSystemPrompt += ` RULE: Check if USER used the word "${mandatoryWord}" inside the <user_verse> tags. If yes, set "user.word_bonus": 10. DO NOT give a word_bonus if the word is missing. CRITICAL: The user must actually use the word in a sentence. Simply typing the word alone or in a list is a 0 bonus.`;
     }
 
     const judgeRes = await c.env.AI.run('@cf/meta/llama-3-8b-instruct', {
@@ -275,24 +275,33 @@ app.get('/profile/:userId', async (c) => {
 });
 
 app.post('/speak', async (c) => {
-    const { text, character } = await c.req.json();
-
-    let selectedVoice = "luna";
-    if (character && OPPONENTS[character.toLowerCase()]) {
-        selectedVoice = OPPONENTS[character.toLowerCase()].voice;
-    } else if (character === "pvp") {
-        selectedVoice = "asteria"; 
-    }
-
     try {
+        const { text, character } = await c.req.json();
+
+        let selectedVoice = "callista";
+
+        const charKey = String(character || "").toLowerCase();
+
+        if (charKey === "pvp") {
+            selectedVoice = "asteria";
+        } else if (OPPONENTS[charKey]?.voice) {
+            selectedVoice = OPPONENTS[charKey].voice;
+        }
+
         const response = await c.env.AI.run('@cf/deepgram/aura-2-en', { 
             text: text,
             speaker: selectedVoice 
         });
+
+        if (!response) throw new Error("AI returned no data");
         
         return new Response(response, {
-            headers: { 'Content-Type': 'audio/mpeg' }
+            headers: { 
+                'Content-Type': 'audio/mpeg',
+                'Cache-Control': 'public, max-age=3600'
+            }
         });
+
     } catch(e) { 
         console.error("TTS Error:", e);
         return c.json({ error: 'TTS Failed' }, 500); 

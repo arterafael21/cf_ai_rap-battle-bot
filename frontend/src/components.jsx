@@ -85,10 +85,12 @@ export const OpponentSelector = ({ current, setOpponent }) => (
     <Stack gap="sm">
         <Text ta="center" size="xs" fw={700} c="dimmed" tt="uppercase">Select Your Opponent</Text>
         <Group justify="center" gap="sm">
-            {Object.keys(OPPONENTS).map(key => {
-                const bot = OPPONENTS[key];
-                const isSelected = current === key;
-                
+            {Object.keys(OPPONENTS)
+                .filter(key => key !== 'pvp')
+                .map(key => {
+                    const bot = OPPONENTS[key];
+                    const isSelected = current === key;  
+                                  
                 return (
                     <Stack gap={5} align="center" key={key}>
                         <Button 

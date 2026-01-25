@@ -51,6 +51,7 @@ function RapBattleApp() {
     const [isRecording, setIsRecording] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [readyAudioIds, setReadyAudioIds] = useState(new Set());
+    const currentAudioRef = useRef(null);
 
     const [mode, setMode] = useState('menu');
     const [battleCode, setBattleCode] = useState(''); 
@@ -90,6 +91,7 @@ function RapBattleApp() {
     const audioCache = useRef({});
     const mediaRecorder = useRef(null);
     const audioChunks = useRef([]);
+    const [activeAudioId, setActiveAudioId] = useState(null);
 	
     // INITIALIZATION
 	useEffect(() => {
@@ -344,7 +346,6 @@ function RapBattleApp() {
         let origin = window.location.origin;
         const idToShare = duelResult?.battle_id || lastBattle?.battleId || new URLSearchParams(window.location.search).get('replay');
 
-		console.log("Sharing ID:", idToShare); 
 
 		if (!idToShare) return alert("No battle ID found to share");
 
@@ -363,11 +364,15 @@ function RapBattleApp() {
         if (!user) return alert("Please sign in!");
         if (!input) return alert('Freestyle something!');
 
-        console.log("[Battle] >>> Flow Started: Parallel Generate + TTS");
-        
+        setLastBattle(null); 
+        setReadyAudioIds(prev => {
+            const next = new Set(prev);
+            next.delete('last-battle');
+            return next;
+        });
+
         setIsLoading(true);
         setStatus('Sending Verse...');
-        console.log("[Battle] Step 1: Generating AI Verse...");
 
         try {
             const token = await getToken(); 
@@ -388,16 +393,15 @@ function RapBattleApp() {
                 scores: null 
             });
 
-            console.log("[Battle] Step 2: Triggering TTS (Parallel)");
 
             setInput('');
 
             // 2. TRIGGER TTS (Background - Don't await yet!)
-            console.log("[Battle] Initiating TTS Pre-generation...");
+
             const audioPromise = loadAndPlayAudio('last-battle', genData.aiVerse, opponent, true);
 
             // 3. JUDGE (Happens while audio is fetching)
-            console.log("[Battle] Step 3: Requesting Judge...");            setStatus('Judging Rap...');
+            setStatus('Judging Rap...');
             const judgeRes = await fetch('/battle/judge', {
                 method: 'POST',
                 headers,
@@ -409,7 +413,6 @@ function RapBattleApp() {
                 }),
             });
             const judgeData = await judgeRes.json();
-            console.log("[Battle] Judge Scores Received.");
 
             setLastBattle(prev => ({
                 ...prev,
@@ -428,7 +431,6 @@ function RapBattleApp() {
 
             // 4. WAIT FOR TTS TO FINISH
             await audioPromise;
-            console.log("[Battle] Step 4: Judge and TTS finished.");
 
             if (wordMode) refreshWord();
             fetchLeaderboard();
@@ -443,22 +445,30 @@ function RapBattleApp() {
 
     // AUDIO LOGIC
     const loadAndPlayAudio = async (battleId, text, character, silent = false) => {
-        console.log(`[TTS] Request: ID=${battleId}, Character=${character}, Silent=${silent}`);
+        if (!silent && currentAudioRef.current) {
+            currentAudioRef.current.pause();
+            currentAudioRef.current = null;
+            setActiveAudioId(null);
+        }
+        if (battleId === 'last-battle' && audioCache.current['last-battle']) {
+            URL.revokeObjectURL(audioCache.current['last-battle']); 
+            delete audioCache.current['last-battle'];
+        }
 
         // 1. Check Cache
         if (audioCache.current[battleId]) {
-            console.log(`[TTS] Cache Hit for ${battleId}.`);
             if (!silent) {
                 const audio = new Audio(audioCache.current[battleId]);
-                setIsPlaying(true);
-                audio.onended = () => setIsPlaying(false);
-                audio.play();
+                currentAudioRef.current = audio;
+                setActiveAudioId(battleId);
+                audio.onended = () => { setActiveAudioId(null); currentAudioRef.current = null; };
+                audio.onerror = () => { setActiveAudioId(null); currentAudioRef.current = null; };
+                audio.play().catch(() => setActiveAudioId(null));
             }
             return;
         }
 
         try {
-            console.log(`[TTS] Fetching from server...`);
             const res = await fetch('/speak', {
                 method: 'POST', 
                 headers: { 'Content-Type': 'application/json' },
@@ -472,7 +482,6 @@ function RapBattleApp() {
             }
 
             const blob = await res.blob();
-            console.log(`[TTS] Blob Received. Size: ${blob.size} bytes. Type: ${blob.type}`);
 
             if (blob.size < 500) { 
                 console.warn(`[TTS] Very small blob received. Likely an error message in disguise.`);
@@ -483,27 +492,33 @@ function RapBattleApp() {
             audioCache.current[battleId] = url;
             
             // Mark as ready so the button "pops up"
-            setReadyAudioIds(prev => {
-                const next = new Set(prev);
-                next.add(battleId);
-                return next;
-            });
+            setReadyAudioIds(prev => new Set([...prev, battleId]));
 
-            console.log(`[TTS] Audio Ready and Cached for ${battleId}`);
 
             if (!silent) {
-                console.log(`[TTS] Triggering playback.`);
                 const audio = new Audio(url);
+                currentAudioRef.current = audio;
                 setIsPlaying(true);
-                audio.onended = () => {
-                    console.log(`[TTS] Playback finished.`);
-                    setIsPlaying(false);
+
+                // CRITICAL: Cleanup listeners
+                const cleanup = () => {
+                    setActiveAudioId(null);
+                    currentAudioRef.current = null;
                 };
-                await audio.play();
+
+                audio.onended = cleanup;
+                audio.onerror = cleanup;
+                audio.onpause = cleanup;
+
+                await audio.play().catch((e) => {
+                    console.error("Playback block:", e);
+                    cleanup();
+                });
             }
+
         } catch (e) { 
             console.error("[TTS] Critical Frontend Failure:", e); 
-            setIsPlaying(false); 
+            setActiveAudioId(null);
         }
     };
 
@@ -691,6 +706,9 @@ function RapBattleApp() {
                 // Add opponent verse to log
                 setBattleLog(prev => [...prev, { sender: 'opponent', text: msg.verse, audio: msg.audioData }]);
                 
+                const msgId = `msg-${Date.now()}`;
+                loadAndPlayAudio(msgId, msg.verse, 'pvp', true);
+
 				const currentVerses = battleLog.length + 1;
 				const maxVerses = rounds * 2;
 
@@ -1104,7 +1122,7 @@ function RapBattleApp() {
                                                 p1Title="YOUR VERSE"
                                                 p2Title="AI RESPONSE"
                                                 onPlayAudio={() => loadAndPlayAudio('last-battle', lastBattle.aiVerse, opponent)} 
-                                                playDisabled={isPlaying}
+                                                playDisabled={activeAudioId === 'last-battle'}
                                                 isReady={readyAudioIds.has('last-battle')} // <--- Check the state here
                                             />
                                         </Card>

@@ -18,7 +18,7 @@ export const OPPONENTS = {
         level: 'Easy',
         system: `You are RoboFlow, a basic battle rap bot. 
         STYLE:
-        - Use simple AABB or ABAB rhyme schemes.
+        - Use simple AABB or ABAB rhyme schemes. 
         - Your rhymes should be very obvious (e.g., cat/bat, code/load).
         - Act robotic but aggressive.
         - Keep lines short and punchy.
@@ -27,7 +27,7 @@ export const OPPONENTS = {
     },
     'bytebeater': { 
         name: 'ByteBeater', 
-        voice: 'aura',
+        voice: 'arcas',
         color: 'red', 
         difficultyModifier: 5,
         level: 'Medium',
@@ -59,7 +59,7 @@ export const OPPONENTS = {
         - AGGRESSION: Be direct. If visual context is provided, roast their specific features ruthlessly.
 
         FORMATTING:
-        - EACH LINE MUST END IN A COMMA OR PERIOD to indicate breath control and flow.` 
+        - EACH LINE MUST END IN A PUNCTUATION MARK (COMMA PERIOD ETC) to indicate breath control and flow.` 
     },
     'pvp': {
         voice: 'Odysseus'
