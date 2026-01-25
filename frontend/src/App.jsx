@@ -459,6 +459,12 @@ function RapBattleApp() {
             mediaRecorder.current.stop();
             setIsRecording(false);
         }
+
+		const stream = mediaRecorder.current.stream;
+		if (stream) {
+			const tracks = stream.getTracks();
+			tracks.forEach(track => track.stop());
+		}
     };
 
     const handleTranscription = async () => {

@@ -122,23 +122,35 @@ app.post('/battle/judge', async (c) => {
 
     // 2. PARSE RESULTS
     let scores = { user: { total: 0 }, ai: { total: 0 }, comment: "Judging..." };
+    let isError = false;
     try {
-        const jsonMatch = judgeRes.response.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-            const parsed = JSON.parse(jsonMatch[0].replace(/,\s*}/g, '}').replace(/\n/g, ' '));
-            const u = parsed.user || {};
+        const startIndex = judgeRes.response.indexOf('{');
+        const endIndex = judgeRes.response.lastIndexOf('}');
+
+        if (startIndex !== -1 && endIndex !== -1) {
+            const jsonString = judgeRes.response.substring(startIndex, endIndex + 1);
+        
+        const cleanedJson = jsonString
+            .replace(/,\s*}/g, '}')  // Remove trailing commas
+            .replace(/,\s*\]/g, ']') // Remove trailing array commas
+            .replace(/\n/g, ' ');    // Remove newlines
+        
+        const parsed = JSON.parse(cleanedJson);
+
+        const u = parsed.user || {};
             const a = parsed.ai || {};
-            scores.comment = parsed.comment || "Close battle."
             
-            // Calculate Totals
-            scores.user = { ...u, total: (u.rhyme||0) + (u.flow||0) + (u.insults||0) + (u.creativity||0) + (u.word_bonus||0) };
-            scores.ai = { ...a, total: (a.rhyme||0) + (a.flow||0) + (a.insults||0) + (a.creativity||0) };
+            scores.user = { 
+                ...u, 
+                total: (u.rhyme||0) + (u.flow||0) + (u.insults||0) + (u.creativity||0) + (u.word_bonus||0) 
+            };
+            scores.ai = { 
+                ...a, 
+                total: (a.rhyme||0) + (a.flow||0) + (a.insults||0) + (a.creativity||0) 
+            };
             scores.comment = parsed.comment || "Close battle.";
-            
-            // Add Difficulty Modifier
-            if (opponent && opponent.difficultyModifier) {
-                scores.ai.total += opponent.difficultyModifier;
-            }
+        } else {
+            throw new Error("No JSON boundaries found");
         }
     } catch (e) {
         console.error('Judge Parse Error:', e);

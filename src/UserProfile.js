@@ -4,18 +4,10 @@ import { Hono } from 'hono';
 const app = new Hono();
 
 app.get('/stats', async (c) => {
-    // access storage
     const storage = c.env.storage;
-
-    // LOAD STATS
-    // Initialize separate counters for AI and PVP
     let stats = (await storage.get('stats')) || {
-        ai_wins: 0,
-        ai_losses: 0,
-        ai_score: 0,
-        pvp_wins: 0,
-        pvp_losses: 0,
-        pvp_score: 0,
+        ai_wins: 0, ai_losses: 0, ai_score: 0,
+        pvp_wins: 0, pvp_losses: 0, pvp_score: 0,
         rank: 'Novice',
     };
     stats.score = (stats.ai_score || 0) + (stats.pvp_score || 0);
@@ -24,34 +16,23 @@ app.get('/stats', async (c) => {
 
 app.post('/update', async (c) => {
     const storage = c.env.storage;
-    const { result, type, hasWordBonus } = await c.req.json(); 
+    const { result, type, pointsValue } = await c.req.json(); 
 
-    // Retrieve existing or set defaults
     let stats = (await storage.get('stats')) || { 
         ai_wins: 0, ai_losses: 0, ai_score: 0, 
         pvp_wins: 0, pvp_losses: 0, pvp_score: 0, 
         rank: 'Novice' 
     };
 
-    // 1. CALCULATE POINTS
-    let pointsChange = 0;
-
-    const baseWinValue = pointsChange || 10;
+    const pointsChange = pointsValue || 0;
 
     if (result === 'win') {
-        // Base points
         if (type === 'pvp') {
             stats.pvp_wins = (stats.pvp_wins || 0) + 1;
-            pointsChange += 30; // high reward for beating human
         } else {
             stats.ai_wins = (stats.ai_wins || 0) + 1;
-            pointsChange += baseWinValue; // variable reward based on Bot Difficulty
         }
-
-        // Bonus
-        if (hasWordBonus) pointsChange += 5;
-    } else {
-        // Handle Losses
+    } else if (result === 'loss' || result === 'draw') {
         if (type === 'pvp') {
             stats.pvp_losses = (stats.pvp_losses || 0) + 1;
         } else {
@@ -59,22 +40,21 @@ app.post('/update', async (c) => {
         }
     }
     
-    // 2. UPDATE SPECIFIC SCORE
+    // Apply the points change to the correct category
     if (type === 'pvp') {
         stats.pvp_score = Math.max(0, (stats.pvp_score || 0) + pointsChange);
     } else {
         stats.ai_score = Math.max(0, (stats.ai_score || 0) + pointsChange);
     }
 
-    // 3. UPDATE RANK (Based on TOTAL score)
+    // UPDATE RANK
     const totalScore = (stats.ai_score || 0) + (stats.pvp_score || 0);
 
-    if (totalScore < 50) stats.rank = 'Novice';
-    else if (totalScore < 200) stats.rank = 'Amateur';
-    else if (totalScore < 1000) stats.rank = 'Pro';
+    if (totalScore < 100) stats.rank = 'Novice';
+    else if (totalScore < 500) stats.rank = 'Amateur';
+    else if (totalScore < 2500) stats.rank = 'Pro';
     else stats.rank = 'Rap God';
 
-    // 4. Update total wins
     stats.wins = (stats.ai_wins || 0) + (stats.pvp_wins || 0);
     stats.losses = (stats.ai_losses || 0) + (stats.pvp_losses || 0);
     stats.score = totalScore;
