@@ -164,8 +164,6 @@ app.post('/battle/judge', async (c) => {
         result = scores.user.total > scores.ai.total ? "win" : (scores.user.total < scores.ai.total ? "loss" : "draw");
     }
 
-    result = scores.user.total > scores.ai.total ? "win" : "loss";
-
     let battleId = crypto.randomUUID();
     if (c.env.DB) {
         try {
@@ -214,27 +212,25 @@ app.post('/battle/judge', async (c) => {
         try {
             const id = c.env.USER_PROFILE.idFromName(uId);
             const stub = c.env.USER_PROFILE.get(id);
-            const pointsValue = (opponent && opponent.points) ? opponent.points : 10;
 
-            const earnedWordBonus = scores.user.word_bonus > 0 ? 10 : 0;
-            
-            // 1. Update Personal Profile
             const userUpdateRes = await stub.fetch('http://do/update', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ result, type: 'ai', hasWordBonus: earnedWordBonus > 0, pointsValue })
+                body: JSON.stringify({ 
+                    result, 
+                    type: 'ai', 
+                    pointsValue: totalPointsEarned // <-- Use the actual points here!
+                })
             });
                         
             // 2. Update Leaderboard (Add Points Earned)
-            if (result === 'win') {
+            if (result === 'win' || totalPointsEarned > 0) {
                 let displayName = "Unknown";
                 if (c.env.DB) {
                     const u = await c.env.DB.prepare('SELECT mc_name FROM users WHERE id = ?').bind(uId).first();
                     if (u) displayName = u.mc_name;
                 }
                 
-                const totalPointsEarned = pointsValue + earnedWordBonus; 
-
                 const lbId = c.env.LEADERBOARD.idFromName("GLOBAL");
                 await c.env.LEADERBOARD.get(lbId).fetch('http://do/submit', {
                     method: 'POST',
