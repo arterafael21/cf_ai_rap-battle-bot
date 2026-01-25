@@ -77,11 +77,12 @@ function RapBattleApp() {
 			ws.current.send(JSON.stringify({
 				type: 'UPDATE_SETTINGS',
 				rounds: parseInt(rounds),
+				turnTime: parseInt(timeLeft),
 				battleMode: battleMode,
 				mandatoryWord: wordMode ? targetWord : null
 			}));
 		}
-	}, [rounds, battleMode, mode, targetWord])
+	}, [rounds, battleMode, mode, targetWord, timeLeft])
     useEffect(() => {
         if (user) {
             fetchStats(user.id);
@@ -509,8 +510,11 @@ function RapBattleApp() {
 				const amIP1 = msg.p1Info.id === user.id;
 				const opponentInfo = amIP1 ? msg.p2Info : msg.p1Info;
 
+				setP1Data({ name: opponentInfo.username, id: opponentInfo.id });
+
 				if (msg.battleMode) setBattleMode(msg.battleMode);
                 if (msg.rounds) setRounds(msg.rounds);
+				if (msg.turnTime) setTimeLeft(msg.turnTime);
                 if (msg.mandatoryWord) { setTargetWord(msg.mandatoryWord); setWordMode(true); }
                 
 				setMode('pre_battle');
@@ -750,23 +754,39 @@ function RapBattleApp() {
                                             {lastBattle.scores ? (
                                                 <>
                                                     <Grid>
-                                                        {/* ... Your Existing Scoreboard Grid Code ... */}
-                                                        {/* Copy the User/AI Score Cards from previous step here */}
-                                                         <Grid.Col span={6}>
-                                                            <Card bg="white" withBorder h="100%">
-                                                                <Text size="xs" c="dimmed" fw={700}>YOU</Text>
-                                                                <Title order={2} c="blue">{lastBattle.scores.user.total}</Title>
-                                                                {/* ... details ... */}
-                                                            </Card>
-                                                        </Grid.Col>
-                                                        <Grid.Col span={6}>
-                                                            <Card bg="white" withBorder h="100%">
-                                                                <Text size="xs" c="dimmed" fw={700}>AI</Text>
-                                                                <Title order={2} c="red">{lastBattle.scores.ai.total}</Title>
-                                                                {/* ... details ... */}
-                                                            </Card>
-                                                        </Grid.Col>
-                                                    </Grid>
+													{/* USER SCORE CARD */}
+													<Grid.Col span={6}>
+														<Card bg="white" withBorder h="100%">
+															<Text size="xs" c="dimmed" fw={700}>YOU ({identity?.mc_name || 'User'})</Text>
+															<Title order={2} c="blue">{lastBattle.scores.user.total}</Title>
+															
+															<Stack gap={2} mt={5}>
+																<Group justify="space-between"><Text size="xs">Rhyme:</Text><Text size="xs" fw={700}>{lastBattle.scores.user.rhyme}</Text></Group>
+																<Group justify="space-between"><Text size="xs">Flow:</Text><Text size="xs" fw={700}>{lastBattle.scores.user.flow}</Text></Group>
+																<Group justify="space-between"><Text size="xs">Roasts:</Text><Text size="xs" fw={700}>{lastBattle.scores.user.insults}</Text></Group>
+																<Group justify="space-between"><Text size="xs">Creative:</Text><Text size="xs" fw={700}>{lastBattle.scores.user.creativity}</Text></Group>
+																{lastBattle.scores.user.word_bonus > 0 && (
+																	<Group justify="space-between"><Text size="xs" c="orange" fw={700}>Word Bonus:</Text><Text size="xs" c="orange" fw={700}>+10</Text></Group>
+																)}
+															</Stack>
+														</Card>
+													</Grid.Col>
+
+													{/* AI SCORE CARD */}
+													<Grid.Col span={6}>
+														<Card bg="white" withBorder h="100%">
+															<Text size="xs" c="dimmed" fw={700}>{lastBattle.opponent.toUpperCase()}</Text>
+															<Title order={2} c="red">{lastBattle.scores.ai.total}</Title>
+															
+															<Stack gap={2} mt={5}>
+																<Group justify="space-between"><Text size="xs">Rhyme:</Text><Text size="xs" fw={700}>{lastBattle.scores.ai.rhyme}</Text></Group>
+																<Group justify="space-between"><Text size="xs">Flow:</Text><Text size="xs" fw={700}>{lastBattle.scores.ai.flow}</Text></Group>
+																<Group justify="space-between"><Text size="xs">Roasts:</Text><Text size="xs" fw={700}>{lastBattle.scores.ai.insults}</Text></Group>
+																<Group justify="space-between"><Text size="xs">Creative:</Text><Text size="xs" fw={700}>{lastBattle.scores.ai.creativity}</Text></Group>
+															</Stack>
+														</Card>
+													</Grid.Col>
+												</Grid>
                                                     <Text size="sm" mt="md" fs="italic" c="dimmed" ta="center">"{lastBattle.scores.comment}"</Text>
                                                 </>
                                             ) : (
@@ -867,15 +887,29 @@ function RapBattleApp() {
                                             <Divider style={{ width: '100%' }} label="Settings" labelPosition="center"/>
 
 											{/* ROUND SELECTOR */}
-											<Group>
+                                            <Group>
                                                 <Text size="sm" fw={700}>Rounds:</Text>
                                                 <SegmentedControl 
                                                     value={String(rounds)} 
                                                     onChange={(val) => setRounds(Number(val))} 
                                                     data={[
-                                                        { label: '1 Round', value: '1' },
-                                                        { label: '2 Rounds', value: '2' },
-                                                        { label: '3 Rounds', value: '3' }
+                                                        { label: '1', value: '1' },
+                                                        { label: '2', value: '2' },
+                                                        { label: '3', value: '3' }
+                                                    ]} 
+                                                />
+                                            </Group>
+
+                                            {/* TIME SELECTOR */}
+                                            <Group>
+                                                <Text size="sm" fw={700}>Time:</Text>
+                                                <SegmentedControl 
+                                                    value={String(timeLeft)} // We'll reuse timeLeft state for the setting
+                                                    onChange={(val) => setTimeLeft(Number(val))} 
+                                                    data={[
+                                                        { label: '30s', value: '30' },
+                                                        { label: '45s', value: '45' },
+                                                        { label: '60s', value: '60' }
                                                     ]} 
                                                 />
                                             </Group>
@@ -1086,7 +1120,6 @@ function RapBattleApp() {
                                         <Stack align="center">
                                             <Title order={2}>Winner: {duelResult.winner}</Title>
                                             
-                                            {/* UPDATED: Uses the standardized component now */}
                                             <div style={{ width: '100%' }}>
                                                 <VerseDisplay 
                                                     p1Verse={duelResult.p1_verse}
@@ -1096,19 +1129,44 @@ function RapBattleApp() {
                                                 />
                                             </div>
 
-                                            <Group gap="xl" mt="md">
-                                                <Stack align="center">
-                                                    <Text fw={700}>P1 Score</Text>
-                                                    <Badge size="xl" color={duelResult.winnerCode === 'p1_win' ? 'green' : 'gray'}>{duelResult.scores.p1_score}</Badge>
-                                                </Stack>
-                                                <Title order={3}>VS</Title>
-                                                <Stack align="center">
-                                                    <Text fw={700}>P2 Score</Text>
-                                                    <Badge size="xl" color={duelResult.winnerCode === 'p2_win' ? 'green' : 'gray'}>{duelResult.scores.p2_score}</Badge>
-                                                </Stack>
-                                            </Group>
+                                            {/* DETAILED SCOREBOARD FOR PVP */}
+                                            <Grid style={{ width: '100%' }} mt="md">
+                                                {/* PLAYER 1 SCORES */}
+                                                <Grid.Col span={6}>
+                                                    <Card bg="blue.0" withBorder h="100%">
+                                                        <Text size="xs" c="dimmed" fw={700}>PLAYER 1</Text>
+                                                        <Title order={2} c="blue">{duelResult.scores.p1?.total || duelResult.scores.p1_score || 0}</Title>
+                                                        
+                                                        {duelResult.scores.p1?.rhyme !== undefined && (
+                                                            <Stack gap={2} mt={5}>
+                                                                <Group justify="space-between"><Text size="xs">Rhyme:</Text><Text size="xs" fw={700}>{duelResult.scores.p1.rhyme}</Text></Group>
+                                                                <Group justify="space-between"><Text size="xs">Flow:</Text><Text size="xs" fw={700}>{duelResult.scores.p1.flow}</Text></Group>
+                                                                <Group justify="space-between"><Text size="xs">Bars:</Text><Text size="xs" fw={700}>{duelResult.scores.p1.bars}</Text></Group>
+                                                                <Group justify="space-between"><Text size="xs">Aggro:</Text><Text size="xs" fw={700}>{duelResult.scores.p1.aggression}</Text></Group>
+                                                            </Stack>
+                                                        )}
+                                                    </Card>
+                                                </Grid.Col>
+
+                                                {/* PLAYER 2 SCORES */}
+                                                <Grid.Col span={6}>
+                                                    <Card bg="red.0" withBorder h="100%">
+                                                        <Text size="xs" c="dimmed" fw={700}>PLAYER 2</Text>
+                                                        <Title order={2} c="red">{duelResult.scores.p2?.total || duelResult.scores.p2_score || 0}</Title>
+                                                        
+                                                        {duelResult.scores.p2?.rhyme !== undefined && (
+                                                            <Stack gap={2} mt={5}>
+                                                                <Group justify="space-between"><Text size="xs">Rhyme:</Text><Text size="xs" fw={700}>{duelResult.scores.p2.rhyme}</Text></Group>
+                                                                <Group justify="space-between"><Text size="xs">Flow:</Text><Text size="xs" fw={700}>{duelResult.scores.p2.flow}</Text></Group>
+                                                                <Group justify="space-between"><Text size="xs">Bars:</Text><Text size="xs" fw={700}>{duelResult.scores.p2.bars}</Text></Group>
+                                                                <Group justify="space-between"><Text size="xs">Aggro:</Text><Text size="xs" fw={700}>{duelResult.scores.p2.aggression}</Text></Group>
+                                                            </Stack>
+                                                        )}
+                                                    </Card>
+                                                </Grid.Col>
+                                            </Grid>
                                             
-                                            <Text c="dimmed" mt="md" ta="center">"{duelResult.scores.comment}"</Text>
+                                            <Text c="dimmed" mt="md" ta="center" fs="italic">"{duelResult.scores.comment}"</Text>
                                             <Button mt="lg" onClick={() => { setMode("menu"); setInput(''); }}>Back to Menu</Button>
                                             
                                             {window.location.search.includes('replay') && (

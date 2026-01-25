@@ -1,3 +1,5 @@
+import { getRandomWord } from './constants';
+
 export class Matchmaker {
     constructor(state, env) {
         this.state = state;

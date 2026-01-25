@@ -191,6 +191,7 @@ export class Challenge {
         if (settings.turnTime) this.turnTime = parseInt(settings.turnTime);
         if (settings.battleMode) this.battleMode = settings.battleMode;
         if (settings.mandatoryWord) this.mandatoryWord = settings.mandatoryWord;
+        if (settings.turnTime) this.turnTime = parseInt(settings.turnTime);
     }
 
     startMatch() {
@@ -249,8 +250,8 @@ export class Challenge {
 
                 RETURN JSON STRUCTURE ONLY, NO OTEHR TEXT EXCEPT JSON:
                 {
-                    "p1_score": number,
-                    "p2_score": number,
+                    "p1": { "rhyme": number, "flow": number, "bars": number, "aggression": number, "total": number },
+                    "p2": { "rhyme": number, "flow": number, "bars": number, "aggression": number, "total": number },
                     "winner": "Username or 'Draw'",
                     "comment": "Critical 2-sentence summary."
                 }
@@ -278,7 +279,14 @@ export class Challenge {
             };
         } catch (e) {
             console.error("Judge Exception", e);
-            return { winner: 'Draw', scores: { comment: "Judging Error", p1_score: 0, p2_score: 0 } };
+            return { 
+                winner: 'Draw', 
+                scores: { 
+                    comment: "Judging Error", 
+                    p1: { total: 0, rhyme: 0, flow: 0, bars: 0, aggression: 0 }, 
+                    p2: { total: 0, rhyme: 0, flow: 0, bars: 0, aggression: 0 } 
+                }
+            };
         }
     }
     
