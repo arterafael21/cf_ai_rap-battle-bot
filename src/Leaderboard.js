@@ -16,7 +16,7 @@ export class Leaderboard extends DurableObject {
 
         // --- SUBMIT SCORE ---
         if (request.method === 'POST' && url.pathname === '/submit') {
-            const { username, score } = await request.json();
+            const { username, userId, score } = await request.json();
             
             // Get current list
             let list = (await this.storage.get('leaders')) || [];

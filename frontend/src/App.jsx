@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-    MantineProvider, Container, Title, Card, Text, Button, Group, Badge, Stack, Grid, Loader, Tabs, Input, CopyButton, Divider, Center, SegmentedControl, Switch, rem, Modal, FileButton, TextInput, ActionIcon, Table, Avatar, Textarea
+    MantineProvider, Container, Title, Card, Text, Button, Group, Badge, Stack, Grid, Loader, Tabs, Input, CopyButton, Divider, Center, SegmentedControl, Switch, rem, Modal, FileButton, TextInput, ActionIcon, Table, Avatar, Textarea, Skeleton
 } from '@mantine/core';
 import { 
     IconMicrophone, IconMicrophoneOff, IconTrophy, IconSwords, IconUsers, IconSearch, IconArrowLeft, IconShare, IconKeyboard, IconMusic, IconUserCircle, IconEdit, IconSend, IconPlayerPlay,
@@ -315,26 +315,60 @@ function RapBattleApp() {
         
         setIsLoading(true);
         setStatus('Sending Verse');
+		setLastBattle(null);
 
         try {
             const token = await getToken(); 
-            const res = await fetch('/battle', {
+			const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
+            
+			// 1. GENERATE VERSE
+			const genRes = await fetch('/battle/generate', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                body: JSON.stringify({ userRap: input, opponent, mandatoryWord: wordMode ? targetWord : null }),
+                headers,
+                body: JSON.stringify({ userRap: input, opponent }),
             });
+            const genData = await genRes.json();
 
-            setStatus('AI Writing...');
-            const data = await res.json();
-            setStatus('Ready');
-			setLastBattle(data);
-            data.id = `battle-${Date.now()}`;
-            saveHistory(data);
-            setInput(''); 
-            if (wordMode) refreshWord(); 
-            fetchLeaderboard();
-        } catch (e) { alert(e.message); setStatus('Error'); }
-        setIsLoading(false);
+			// UPDATE UI: Show verse immediately!
+			setLastBattle({
+                userRap: genData.userRap,
+                aiVerse: genData.aiVerse,
+                opponent: genData.opponent.name,
+                scores: null // Indicates "Judging in Progress"
+            });
+			setInput('');
+
+            // STEP 2: JUDGE
+            setStatus('Judging Rap...');
+            const judgeRes = await fetch('/battle/judge', {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({ 
+                    userRap: genData.userRap, 
+                    aiVerse: genData.aiVerse, 
+                    opponent: genData.opponent,
+                    mandatoryWord: wordMode ? targetWord : null
+                }),
+            });
+            const judgeData = await judgeRes.json();
+
+			// UPDATE UI: Show final scores
+			setLastBattle(prev => ({
+				...prev,
+				scores: judgeData.scores,
+				result: judgeData.result
+			}));
+
+			setStatus('Ready');
+			saveHistory({ ...genData, ...judgeData, id: `battle-${Date.now()}` });
+			if (wordMode) refreshWord();
+			fetchLeaderboard();
+        } catch (e) { 
+			alert(e.message); 
+			setStatus('Error'); 
+		} finally {
+        	setIsLoading(false);
+		}
     };
 
     // AUDIO LOGIC
@@ -690,61 +724,66 @@ function RapBattleApp() {
 
                                     {lastBattle && (
                                         <Card mt="lg" padding="lg" radius="md" withBorder bg="gray.0">
-                                            <Group justify="space-between" mb="sm">
-                                                <Title order={4}>Last Round Results</Title>
-                                                <Badge color={lastBattle.result === 'win' ? 'green' : 'red'} size="lg">{lastBattle.result.toUpperCase()}</Badge>
+                                            
+											{/* HEADER: SHOW RESULT OR LOADING */}
+											<Group justify="space-between" mb="sm">
+                                                <Title order={4}>Results</Title>
+                                                {lastBattle.scores ? (
+                                                    <Badge color={lastBattle.result === 'win' ? 'green' : 'red'} size="lg">
+                                                        {lastBattle.result.toUpperCase()}
+                                                    </Badge>
+                                                ) : (
+                                                    <Badge color="orange" size="lg">JUDGING...</Badge>
+                                                )}
                                             </Group>
 
-											{/* SCOREBOARD */}
-                                            <Grid>
-                                                {/* USER SCORE CARD */}
-                                                <Grid.Col span={6}>
-                                                    <Card bg="white" withBorder h="100%">
-                                                        <Text size="xs" c="dimmed" fw={700}>YOU ({identity?.mc_name || 'User'})</Text>
-                                                        <Title order={2} c="blue">{lastBattle.scores.user.total}</Title>
-                                                        
-                                                        {/* DETAILED BREAKDOWN */}
-                                                        <Stack gap={2} mt={5}>
-                                                            <Group justify="space-between"><Text size="xs">Rhyme:</Text><Text size="xs" fw={700}>{lastBattle.scores.user.rhyme}</Text></Group>
-                                                            <Group justify="space-between"><Text size="xs">Flow:</Text><Text size="xs" fw={700}>{lastBattle.scores.user.flow}</Text></Group>
-                                                            <Group justify="space-between"><Text size="xs">Roasts:</Text><Text size="xs" fw={700}>{lastBattle.scores.user.insults}</Text></Group>
-                                                            <Group justify="space-between"><Text size="xs">Creative:</Text><Text size="xs" fw={700}>{lastBattle.scores.user.creativity}</Text></Group>
-                                                            {lastBattle.scores.user.word_bonus > 0 && (
-                                                                <Group justify="space-between"><Text size="xs" c="orange" fw={700}>Word Bonus:</Text><Text size="xs" c="orange" fw={700}>+10</Text></Group>
-                                                            )}
-                                                        </Stack>
-                                                    </Card>
-                                                </Grid.Col>
-
-                                                {/* AI SCORE CARD */}
-                                                <Grid.Col span={6}>
-                                                    <Card bg="white" withBorder h="100%">
-                                                        <Text size="xs" c="dimmed" fw={700}>{lastBattle.opponent.toUpperCase()}</Text>
-                                                        <Title order={2} c="red">{lastBattle.scores.ai.total}</Title>
-                                                        
-                                                        <Stack gap={2} mt={5}>
-                                                            <Group justify="space-between"><Text size="xs">Rhyme:</Text><Text size="xs" fw={700}>{lastBattle.scores.ai.rhyme}</Text></Group>
-                                                            <Group justify="space-between"><Text size="xs">Flow:</Text><Text size="xs" fw={700}>{lastBattle.scores.ai.flow}</Text></Group>
-                                                            <Group justify="space-between"><Text size="xs">Roasts:</Text><Text size="xs" fw={700}>{lastBattle.scores.ai.insults}</Text></Group>
-                                                            <Group justify="space-between"><Text size="xs">Creative:</Text><Text size="xs" fw={700}>{lastBattle.scores.ai.creativity}</Text></Group>
-                                                            {/* AI doesn't get word bonus */}
-                                                        </Stack>
-                                                    </Card>
-                                                </Grid.Col>
-                                            </Grid>
-                                            <Text size="sm" mt="md" fs="italic" c="dimmed" ta="center">"{lastBattle.scores.comment}"</Text>
+                                            {/* SECTION 1: SCOREBOARD (OR SKELETON) */}
+                                            {lastBattle.scores ? (
+                                                <>
+                                                    <Grid>
+                                                        {/* ... Your Existing Scoreboard Grid Code ... */}
+                                                        {/* Copy the User/AI Score Cards from previous step here */}
+                                                         <Grid.Col span={6}>
+                                                            <Card bg="white" withBorder h="100%">
+                                                                <Text size="xs" c="dimmed" fw={700}>YOU</Text>
+                                                                <Title order={2} c="blue">{lastBattle.scores.user.total}</Title>
+                                                                {/* ... details ... */}
+                                                            </Card>
+                                                        </Grid.Col>
+                                                        <Grid.Col span={6}>
+                                                            <Card bg="white" withBorder h="100%">
+                                                                <Text size="xs" c="dimmed" fw={700}>AI</Text>
+                                                                <Title order={2} c="red">{lastBattle.scores.ai.total}</Title>
+                                                                {/* ... details ... */}
+                                                            </Card>
+                                                        </Grid.Col>
+                                                    </Grid>
+                                                    <Text size="sm" mt="md" fs="italic" c="dimmed" ta="center">"{lastBattle.scores.comment}"</Text>
+                                                </>
+                                            ) : (
+                                                /* JUDGING SKELETON */
+                                                <Card bg="white" withBorder p="md">
+                                                    <Stack align="center" gap="md">
+                                                        <Loader size="md" type="bars" color="orange" />
+                                                        <Text c="dimmed" size="sm" fs="italic">The judges are reviewing the transcript...</Text>
+                                                        <Group style={{ width: '100%' }}>
+                                                            <Skeleton height={8} radius="xl" width="60%" />
+                                                            <Skeleton height={8} radius="xl" width="80%" />
+                                                        </Group>
+                                                    </Stack>
+                                                </Card>
+                                            )}
                                             
                                             <Divider my="md" />
 
-											{/* VERSES DISPLAY */}
-                                            
+                                            {/* SECTION 2: VERSES (ALWAYS VISIBLE IMMEDIATELY) */}
                                             <VerseDisplay
-												p1Verse={lastBattle.userRap}
+                                                p1Verse={lastBattle.userRap}
                                                 p2Verse={lastBattle.aiVerse}
                                                 p1Title="YOUR VERSE"
                                                 p2Title="AI RESPONSE"
                                                 onPlayAudio={() => playAudio('last-battle', lastBattle.aiVerse, opponent)}
-											/>
+                                            />
                                         </Card>
                                     )}
                                 </Container>

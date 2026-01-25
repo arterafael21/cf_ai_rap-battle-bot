@@ -34,47 +34,60 @@ async function verifyAuth(c) {
     }
 }
 
-// --- 1. BATTLE ROUTE ---
-app.post('/battle', async (c) => {
+// --- 1. GENERATE VERSE ONLY ---
+app.post('/battle/generate', async (c) => {
     let userId;
     try { userId = await verifyAuth(c); } 
     catch (e) { return c.json({ error: e.message }, 401); }
 
     const body = await c.req.json();
     const userRap = body.userRap || 'freestyle';
-	const mandatoryWord = body.mandatoryWord;
     const opponentID = body.opponent || 'roboflow';
     const opponentConfig = OPPONENTS[opponentID] || OPPONENTS['roboflow'];
-    
-    // FETCH USER CONTEXT
+
+    // 1. FETCH CONTEXT (Roast Logic)
     let visualContext = "";
     if (c.env.DB) {
         try {
             const userRow = await c.env.DB.prepare('SELECT roast_context FROM users WHERE id = ?').bind(userId).first();
             if (userRow && userRow.roast_context) {
                 visualContext = `\nVISUAL CONTEXT: The opponent is a HUMAN who looks like: "${userRow.roast_context}". Roast their appearance.`;
-            } else {
-                visualContext = `\nVISUAL CONTEXT: The opponent is a HUMAN. They have no profile picture, so roast them for being anonymous.`;
             }
-        } catch(e) { console.log("DB Roast Fetch Error", e); }
+        } catch(e) {}
     }
 
     const systemPrompt = `
         ${opponentConfig.system}
         ${visualContext}
-        CRITICAL INSTRUCTION: You are battling a REAL HUMAN. Do NOT call them a bot, AI, or computer. Treat them as an opponent in a rap battle.
+        CRITICAL INSTRUCTION: You are battling a REAL HUMAN. Do NOT call them a bot. Keep it under 8 lines.
     `;
 
-    // AI RAPPER
+    // 2. RUN AI (Generate Verse)
     const rapperRes = await c.env.AI.run('@cf/meta/llama-3-8b-instruct', {
         messages: [
             { role : 'system', content: systemPrompt },
             { role: 'user', content: userRap }
         ]
     });
-    const aiVerse = rapperRes.response;
+    
+    // Return JUST the verse immediately
+    return c.json({ 
+        aiVerse: rapperRes.response, 
+        userRap, 
+        opponent: opponentConfig 
+    });
+});
 
-	let judgeSystemPrompt = `
+// --- 2. JUDGE & SAVE ---
+app.post('/battle/judge', async (c) => {
+    let userId;
+    try { userId = await verifyAuth(c); } 
+    catch (e) { return c.json({ error: e.message }, 401); }
+
+    const { userRap, aiVerse, opponent, mandatoryWord } = await c.req.json();
+    
+    // 1. RUN JUDGE
+    let judgeSystemPrompt = `
         Act as a professional Battle Rap Judge.
         
         TRANSCRIPT:
@@ -100,83 +113,71 @@ app.post('/battle', async (c) => {
         }
     `;
 
-    // Only add mandatory rule if it is NOT null
     if (mandatoryWord && mandatoryWord !== 'NONE') {
-        judgeSystemPrompt += ` 
-            RULE: Check if USER used the word "${mandatoryWord}". 
-            If yes, set "user.word_bonus": 10. If no, 0.
-        `;   
+        judgeSystemPrompt += ` RULE: If USER used word "${mandatoryWord}", set "user.word_bonus": 10. Else 0.`;
     }
 
-    // AI JUDGE
     const judgeRes = await c.env.AI.run('@cf/meta/llama-3-8b-instruct', {
         messages: [{ role: 'user', content: judgeSystemPrompt }]
     });
 
-    let scores = { user: { total: 0 }, ai: { total: 0 }, comment: "Judging Error" };
-
+    // 2. PARSE RESULTS
+    let scores = { user: { total: 0 }, ai: { total: 0 }, comment: "Judging..." };
     try {
-        const raw = judgeRes.response;
-        console.log("RAW JUDGE OUTPUT:", raw);
-        const jsonMatch = raw.match(/\{[\s\S]*\}/);
+        const jsonMatch = judgeRes.response.match(/\{[\s\S]*\}/);
         if (jsonMatch) {
-            const parsed = JSON.parse(jsonMatch[0]);
+            const parsed = JSON.parse(jsonMatch[0].replace(/,\s*}/g, '}').replace(/\n/g, ' '));
             const u = parsed.user || {};
             const a = parsed.ai || {};
+            
+            // Calculate Totals
             scores.user = { ...u, total: (u.rhyme||0) + (u.flow||0) + (u.insults||0) + (u.creativity||0) + (u.word_bonus||0) };
             scores.ai = { ...a, total: (a.rhyme||0) + (a.flow||0) + (a.insults||0) + (a.creativity||0) };
             scores.comment = parsed.comment || "Close battle.";
             
-            scores.ai.total += opponentConfig.difficultyModifier;
+            // Add Difficulty Modifier
+            if (opponent && opponent.difficultyModifier) {
+                scores.ai.total += opponent.difficultyModifier;
+            }
         }
-    } catch (e) { 
-        console.error('Judge Parse Error', e);
-        // Fallback so app doesn't crash
-        scores.comment = "The judge is drunk (AI Error). Defaulting to Draw.";
-        scores.user.total = 20;
-        scores.ai.total = 20;
-    }
+    } catch (e) { console.error(e); }
 
     const result = scores.user.total > scores.ai.total ? "win" : "loss";
-    
-    // UPDATE STATS
-    try {
-        const id = c.env.USER_PROFILE.idFromName(userId);
-        const stub = c.env.USER_PROFILE.get(id);
-		const hasWordBonus = scores.user.word_bonus > 0;
-        const potentialPoints = opponentConfig.points || 0;
 
-		// 1. UPDATE PROFILE
-        const userUpdateRes = await stub.fetch('http://do/update', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ result: result, type: 'ai', hasWordBonus: hasWordBonus, pointsValue: potentialPoints })
-        });
-        const userData = await userUpdateRes.json();
-
-		// 2. SUBMIT TO LEADERBOARD
-        if (result === 'win' && userData.ai_score > 0) {
-            let displayName = "Unknown Rapper";
-            if (c.env.DB) {
-                const u = await c.env.DB.prepare('SELECT mc_name FROM users WHERE id = ?').bind(userId).first();
-                if (u && u.mc_name) displayName = u.mc_name;
-            }
-
-            const lbId = c.env.LEADERBOARD.idFromName("GLOBAL");
-            const lbStub = c.env.LEADERBOARD.get(lbId);
-
-            await lbStub.fetch('http://do/submit', {
+    // 3. BACKGROUND STATS UPDATE (Using waitUntil for speed)
+    const updateTask = async (uId) => {
+        try {
+            const id = c.env.USER_PROFILE.idFromName(uId);
+            const stub = c.env.USER_PROFILE.get(id);
+            const pointsValue = (opponent && opponent.points) ? opponent.points : 10;
+            
+            const userUpdateRes = await stub.fetch('http://do/update', {
                 method: 'POST',
-                body: JSON.stringify({ 
-                    username: displayName,
-                    userId: userId, 
-                    wins: userData.ai_score 
-                })
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ result, type: 'ai', hasWordBonus: scores.user.word_bonus > 0, pointsValue })
             });
-        }
-    } catch (e) { console.error('Failed to update stats', e); }
+            
+            const userData = await userUpdateRes.json();
+            
+            // Update Leaderboard
+             if (userData.ai_score !== undefined) { 
+                let displayName = "Unknown";
+                if (c.env.DB) {
+                    const u = await c.env.DB.prepare('SELECT mc_name FROM users WHERE id = ?').bind(uId).first();
+                    if (u) displayName = u.mc_name;
+                }
+                const lbId = c.env.LEADERBOARD.idFromName("GLOBAL");
+                await c.env.LEADERBOARD.get(lbId).fetch('http://do/submit', {
+                    method: 'POST',
+                    body: JSON.stringify({ username: displayName, userId: uId, score: userData.ai_score })
+                });
+            }
+        } catch(e) { console.error(e); }
+    };
 
-    return c.json({ userRap, aiVerse, result, scores, opponent: opponentConfig.name });
+    c.executionCtx.waitUntil(updateTask(userId));
+    
+    return c.json({ result, scores });
 });
 
 app.post('/transcribe', async (c) => {
