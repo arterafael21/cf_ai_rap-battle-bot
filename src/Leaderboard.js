@@ -20,13 +20,19 @@ export class Leaderboard extends DurableObject {
             
             // Get current list
             let list = (await this.storage.get('leaders')) || [];
+
+            // check if user exists
+            const existingUser = list.findIndex(p => p.userId === userId || p.username === username);
             
-            // Remove existing entry for this user
-            list = list.filter(p => p.userId !== userId &&p.username !== username);
-            
-            // Add new entry
-            if (username && username !== 'None') {
-                list.push({ username, score });
+            if (existingIndex !== -1) {
+                // ACCUMULATE POINTS
+                list[existingIndex].score = (list[existingIndex].score || 0) + score;
+                list[existingIndex].username = username; 
+            } else {
+                // ADD NEW ENTRY
+                if (username && username !== 'None') {
+                    list.push({ username, score });
+                }
             }
             
             // Sort by SCORE descending (Highest first)

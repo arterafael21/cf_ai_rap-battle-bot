@@ -8,7 +8,7 @@ import {
 	IconNumber4Small
 } from '@tabler/icons-react';
 import '@mantine/core/styles.css';
-import { ClerkProvider, SignedIn, SignedOut, useUser, useAuth, useClerk } from "@clerk/clerk-react";
+import { ClerkProvider, SignedIn, SignedOut, useUser, useAuth, useClerk, SignInButton } from "@clerk/clerk-react";
 
 // IMPORTS
 import { getRandomWord } from '../../src/constants';
@@ -52,7 +52,14 @@ function RapBattleApp() {
     const [isOpponentTyping, setIsOpponentTyping] = useState(false);
     const typingTimeoutRef = useRef(null);
 	const [turnCount, setTurnCount] = useState(0);
-    
+	
+
+	// SPECTATING
+    const [isSpectator, setIsSpectator] = useState(false);
+	const [showVoting, setShowVoting] = useState(false);
+	const [hasVoted, setHasVoted] = useState(false);
+	const [voteTimer, setVoteTimer] = useState(0);
+
     // ARENA STATE
     const [isMyTurn, setIsMyTurn] = useState(false);
     const [battleLog, setBattleLog] = useState([]);
@@ -325,7 +332,7 @@ function RapBattleApp() {
 
     const shareReplay = () => {
         let origin = window.location.href;
-        const idToShare = duelResult?.battle_id ||  new URLSearchParams(window.location.search).get('replay');
+        const idToShare = duelResult?.battle_id || lastBattle?.battleId || new URLSearchParams(window.location.search).get('replay');
 
 		if (!idToShare) return alert("No battle ID found to share");
 
@@ -384,10 +391,11 @@ function RapBattleApp() {
 
 			// UPDATE UI: Show final scores
 			setLastBattle(prev => ({
-				...prev,
-				scores: judgeData.scores,
-				result: judgeData.result
-			}));
+                ...prev,
+                scores: judgeData.scores,
+                result: judgeData.result,
+                battleId: judgeData.battleId 
+            }));
 
 			setStatus('Ready');
 			saveHistory({ ...genData, ...judgeData, id: `battle-${Date.now()}` });
@@ -553,6 +561,13 @@ function RapBattleApp() {
 				if (msg.turnTime) setTimeLeft(msg.turnTime);
                 if (msg.mandatoryWord) { setTargetWord(msg.mandatoryWord); setWordMode(true); }
 
+				if (msg.isSpectator) {
+					setIsSpectator(true);
+					setStatus('Spectating Battle');
+				} else {
+					setIsSpectator(false);
+				}
+
 				setMode('pre_battle');
 
 				if (matchStartTimer.current) clearTimeout(matchStartTimer.current);
@@ -565,6 +580,21 @@ function RapBattleApp() {
                     setMode('arena');
                 }, 5000);
             }
+
+			// --- VOTING PHASE ---
+			if (msg.type === 'START_VOTING') {
+				setMode('judging...');
+				setShowVoting(true);
+				setVoteTimer(msg.duration || 30);
+
+				// Visual Countdown for voting
+                const interval = setInterval(() => {
+                    setVoteTimer(prev => {
+                        if (prev <= 1) { clearInterval(interval); return 0; }
+                        return prev - 1;
+                    });
+                }, 1000);
+			}
 
             // --- RECEIVE TURN ---
             if (msg.type === 'NEW_VERSE') {
@@ -619,6 +649,7 @@ function RapBattleApp() {
             if (msg.type === 'RESULT') {
                 setDuelResult(msg.result);
                 setMode('result');
+				setShowVoting(false);
                 ws.current.close();
             }
         };
@@ -700,17 +731,19 @@ function RapBattleApp() {
         <>
             {/* --- 1. SIGNED OUT VIEW --- */}
             <SignedOut>
-				<Text c="dimmed" mt="md" ta="center" fs="italic">"{duelResult.scores.comment}"</Text>
+                {duelResult?.scores?.comment && (
+                    <Text c="dimmed" mt="md" ta="center" fs="italic">"{duelResult.scores.comment}"</Text>
+                )}
                                     
-				<Group mt="md" justify="center">
-					<Button variant="outline" leftSection={<IconShare size={16}/>} onClick={shareReplay}>Copy Link</Button>
-					
-					<SignInButton mode="modal">
-						<Button variant="gradient" gradient={{ from: 'blue', to: 'cyan' }} size="md">
-							Play Now
-						</Button>
-					</SignInButton>
-				</Group>
+                <Group mt="md" justify="center">
+                    <Button variant="outline" leftSection={<IconShare size={16}/>} onClick={shareReplay}>Copy Link</Button>
+                    
+                    <SignInButton mode="modal">
+                        <Button variant="gradient" gradient={{ from: 'blue', to: 'cyan' }} size="md">
+                            Play Now
+                        </Button>
+                    </SignInButton>
+                </Group>
 
                 {mode === 'result' && duelResult ? (
                     <Container size="md" py="xl">
@@ -721,13 +754,13 @@ function RapBattleApp() {
                                     <Title order={2}>Winner: {duelResult.winner}</Title>
                                     
                                     <Grid style={{ width: '100%' }} gutter="lg">
-                                        <Grid.Col span={6}>
+                                        <Grid.Col span={{ base: 12, md: 6 }}>
                                             <Card bg="blue.1" padding="sm" radius="md">
                                                 <Text size="xs" fw={700} c="dimmed">PLAYER 1</Text>
                                                 <Text size="sm" style={{ fontStyle: 'italic', whiteSpace: 'pre-line' }}>"{duelResult.p1_verse}"</Text>
                                             </Card>
                                         </Grid.Col>
-                                        <Grid.Col span={6}>
+                                        <Grid.Col span={{ base: 12, md: 6 }}>
                                             <Card bg="red.1" padding="sm" radius="md">
                                                 <Text size="xs" fw={700} c="dimmed">PLAYER 2</Text>
                                                 <Text size="sm" style={{ fontStyle: 'italic', whiteSpace: 'pre-line' }}>"{duelResult.p2_verse}"</Text>
@@ -735,7 +768,7 @@ function RapBattleApp() {
                                         </Grid.Col>
                                     </Grid>
                                     
-                                    <Text c="dimmed" mt="md" ta="center" fs="italic">"{duelResult.scores.comment}"</Text>
+                                    <Text c="dimmed" mt="md" ta="center" fs="italic">"{duelResult.scores?.comment}"</Text>
                                     
                                     <Group mt="md">
                                         <Button variant="light" leftSection={<IconShare size={16}/>} onClick={shareReplay}>Share</Button>
@@ -791,12 +824,23 @@ function RapBattleApp() {
                                             </Group>
                                             {wordMode && <WordDisplay word={targetWord} onRefresh={refreshWord} />}
                                             <Divider style={{ opacity: 0.5 }} />
-                                            <BattleInputArea 
-                                                input={input} setInput={setInput} 
-                                                isRecording={isRecording} toggleMic={toggleMic} 
-                                                handleSend={handleBattle} isLoading={isLoading} status={status} 
-                                                placeholder={wordMode ? `Freestyle using "${targetWord}"...` : "Freestyle your bars..."} 
-                                            />
+											{!isSpectator ? (
+												<BattleInputArea 
+													input={input} setInput={setInput} 
+													isRecording={isRecording} toggleMic={toggleMic} 
+													handleSend={handleBattle} isLoading={isLoading} status={status} 
+													placeholder={wordMode ? `Freestyle using "${targetWord}"...` : "Freestyle your bars..."} 
+                                            	/>
+											) : (
+												<Card bg="gray.1" radius="md" p="lg" ta="center">
+												<Stack align="center" gap={5}>
+													<IconUsers size={32} />
+													<Title order={4}>Spectator Mode</Title>
+													<Text size="sm" c="dimmed">You are watching the battle live.</Text>
+													</Stack>
+												</Card>
+											)}
+                                            
                                         </Stack>
                                     </Card>
 
@@ -1181,6 +1225,42 @@ function RapBattleApp() {
                                     </Card>
                                 )}
 
+								{showVoting && (
+									<Modal 
+										opened={true} 
+										onClose={() => {}} 
+										withCloseButton={false} 
+										title={<Group><IconSwords/><Text fw={700}>WHO WON?</Text></Group>}
+										centered
+									>
+										<Stack align="center">
+											<Text size="xl" fw={900} c="orange">{voteTimer}s remaining</Text>
+											<Text c="dimmed" size="sm" ta="center">Cast your vote to influence the final score!</Text>
+
+											{!hasVoted ? (
+												<Group grow style={{ width: '100%' }}>
+													<Button 
+														size="xl" color="blue" variant="light"
+														onClick={() => { ws.current.send(JSON.stringify({ type: 'VOTE', vote: 'p1' })); setHasVoted(true); }}
+													>
+														{p1Data?.name || "Player 1"}
+													</Button>
+													<Button 
+														size="xl" color="red" variant="light"
+														onClick={() => { ws.current.send(JSON.stringify({ type: 'VOTE', vote: 'p2' })); setHasVoted(true); }}
+													>
+														{p1Data?.name ? "Player 2" : "Player 2"} 
+													</Button>
+												</Group>
+											) : (
+												<Card bg="green.1" w="100%" ta="center" p="lg">
+													<Title order={3} c="green">VOTE CAST</Title>
+												</Card>
+											)}
+										</Stack>
+									</Modal>
+								)}
+
                                 {mode === 'result' && duelResult && (
                                     <Card shadow="sm" padding="xl" withBorder>
                                         <Stack align="center">
@@ -1209,6 +1289,10 @@ function RapBattleApp() {
                                                                 <Group justify="space-between"><Text size="xs">Flow:</Text><Text size="xs" fw={700}>{duelResult.scores.p1.flow}</Text></Group>
                                                                 <Group justify="space-between"><Text size="xs">Bars:</Text><Text size="xs" fw={700}>{duelResult.scores.p1.bars}</Text></Group>
                                                                 <Group justify="space-between"><Text size="xs">Aggro:</Text><Text size="xs" fw={700}>{duelResult.scores.p1.aggression}</Text></Group>
+																<Group justify="space-between">
+																	<Text size="xs" fw={900} c="grape">Audience:</Text>
+																	<Text size="xs" fw={900} c="grape">+{duelResult.scores?.p1?.audience || 0}</Text>
+																</Group>
                                                             </Stack>
                                                         )}
                                                     </Card>
@@ -1233,11 +1317,17 @@ function RapBattleApp() {
                                             </Grid>
                                             
                                             <Text c="dimmed" mt="md" ta="center" fs="italic">"{duelResult.scores.comment}"</Text>
-                                            <Button mt="lg" onClick={() => { setMode("menu"); setInput(''); }}>Back to Menu</Button>
                                             
-                                            {window.location.search.includes('replay') && (
-                                                <Button variant="light" leftSection={<IconShare size={16}/>} onClick={shareReplay}>Share Replay</Button>
-                                            )}
+                                            <Group justify="center" mt="lg">
+											<Button onClick={() => { setMode("menu"); setInput(''); }}>Back to Menu</Button>
+											<Button 
+												variant="light" 
+												leftSection={<IconShare size={16}/>} 
+												onClick={shareReplay}
+											>
+												Share Replay
+											</Button>
+										</Group>
                                         </Stack>
                                     </Card>
                                 )}

@@ -7,6 +7,7 @@ export class Challenge {
         this.env = env;
         this.p1 = null;
         this.p2 = null;
+        this.spectators = [];
 
         // Default Config
         this.mandatoryWord = null; 
@@ -16,6 +17,10 @@ export class Challenge {
         this.turnStartTime = Date.now();
         this.battleMode = 'text';
 
+        // Voting State
+        this.votes = { p1: 0, p2: 0 };
+        this.votedUsers = new Set();
+
         // Initialize turn owner
         this.currentTurnOwner = 'p1'; 
         this.status = 'OPEN';
@@ -23,7 +28,7 @@ export class Challenge {
 
     async fetch (request) {
         if (this.status === 'FINISHED' || this.status === 'ABANDONED') {
-            return new Response('This batlte is over.', { status: 403 });
+            return new Response('Battle ended.', { status: 403 });
         }
         if (request.headers.get("Upgrade") === "websocket") {
             const pair = new WebSocketPair();
@@ -47,7 +52,8 @@ export class Challenge {
                     const player = {
                         username: event.username,
                         userId: event.userId,
-                        socket: webSocket
+                        socket: webSocket,
+                        role: 'spectator'
                     };
 
                     // CHECK 1: Is the battle over?
@@ -57,7 +63,7 @@ export class Challenge {
 
                     if (event.role === 'CREATE') {
                         this.resetState();
-                        this.p1 = player;
+                        this.p1 = { ...player, role: 'p1' };
                         // APPLY SETTINGS IMMEDIATELY
                         if (event.settings) {
                             this.applySettings(event.settings);
@@ -65,27 +71,56 @@ export class Challenge {
                     } else {
                         // CHECK 2: Does the room exist?
                         if (!this.p1) {
-                            webSocket.send(JSON.stringify({ type: 'ERROR', message: 'Invalid Code. Room not found'}));
+                            webSocket.send(JSON.stringify({ type: 'ERROR', message: 'Room not found'}));
                             webSocket.close();
                             return;
                         }
 
-                        // CHECK 3: Is the room full?
-                        if (this.p2) {
-                            webSocket.send(JSON.stringify({ type: 'ERROR', message: 'Room is full.'}))
-                        }
-                        this.p2 = player;
-                        if (this.p1) {
-                            try {
-                                this.p1.socket.send(JSON.stringify({
-                                    type: 'OPPONENT_JOINED',
-                                    username: this.p2.username,
-                                    userId: this.p2.userId
+                        if (!this.p2) {
+                            this.p2 = { ...player, role: 'p2' };
+                            this.p1.socket.send(JSON.stringify({
+                                type: 'OPPONENT_JOINED',
+                                username: this.p2.username,
+                                userId: this.p2.userId
+                            }));
+                            this.startMatch();
+                        } else {
+                            // ROOM FULL -> ASSIGN SPECTATOR
+                            this.spectators.push(player);
+
+                            webSocket.send(JSON.stringify({
+                                type: 'MATCH_START', 
+                                yourTurn: false,
+                                isSpectator: true, 
+                                p1Info: { username: this.p1.username, id: this.p1.userId },
+                                p2Info: { username: this.p2.username, id: this.p2.userId },
+                                rounds: this.rounds,
+                                turnTime: this.turnTime,
+                                battleMode: this.battleMode,
+                                mandatoryWord: this.mandatoryWord
+                            }));
+
+                            this.transcript.forEach(t => {
+                                const verseType = t.username === this.p1.username ? 'p1' : 'p2'; // Simplified check
+                                webSocket.send(JSON.stringify({
+                                    type: 'NEW_VERSE',
+                                    verse: t.text,
+                                    audioData: null // Don't resend heavy audio for history
                                 }));
-                            } catch (e) {}
+                            });
                         }
-                        this.startMatch();
                     }
+                }
+
+                if (event.type === 'VOTE') {
+                    if (this.status != 'JUDGING') return;
+
+                    if (this.votedUsers.has(webSocket)) return; // alr votes
+
+                    if (event.vote === 'p1') this.votes.p1++;
+                    if (event.vote === 'p2') this.votes.p2++;
+
+                    this.votedUsers.add(webSocket);
                 }
 
                 if (event.type == 'UPDATE_SETTINGS') {
@@ -94,83 +129,112 @@ export class Challenge {
 
                 // --- 2. SUBMIT TURN ---
                 if (event.type === 'SUBMIT_TURN') {
-                    // 1. Check if we should even accept this turn
                     const totalTurnsNeeded = this.rounds * 2;
-                    if (this.status === 'JUDGING' || this.transcript.length >= totalTurnsNeeded) {
-                        return; // Ignore extra clicks
-                    }
+                    if (this.status === 'JUDGING' || this.transcript.length >= totalTurnsNeeded) return;
 
                     const isP1 = (this.p1 && this.p1.socket === webSocket);
+                    const isP2 = (this.p2 && this.p2.socket === webSocket);
+                    
+                    if (!isP1 && !isP2) return;
+
                     const expectedTurn = isP1 ? 'p1' : 'p2';
                     if (this.currentTurnOwner !== expectedTurn) return;
 
-                    // 2. Process Input (Text/Audio)
+                    // Define Sender/Receiver
+                    const sender = isP1 ? this.p1 : this.p2;
+                    const receiver = isP1 ? this.p2 : this.p1;
+
+                    // Transcription / Input Processing
                     let finalVerseText = event.verse || "";
                     if (event.audioData && this.env.AI) {
                         try {
                             const base64 = event.audioData.split(',')[1] || event.audioData;
                             const binaryString = atob(base64);
                             const bytes = new Uint8Array(binaryString.length);
-                            for (let i = 0; i < binaryString.length; i++) {
-                                bytes[i] = binaryString.charCodeAt(i);
-                            }
+                            for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
                             const aiResponse = await this.env.AI.run('@cf/openai/whisper', { audio: [...bytes] });
                             if (aiResponse.text) finalVerseText = aiResponse.text;
-                        } catch (e) {
-                            console.error("Transcription Failed", e);
-                            finalVerseText += " [Audio Transcription Failed]";
-                        }
+                        } catch (e) { finalVerseText += " [Audio Transcription Failed]"; }
                     }
 
-                    const timeTaken = (Date.now() - this.turnStartTime) / 1000;
-                    const isLate = timeTaken > (this.turnTime + 5); 
-                    const sender = isP1 ? this.p1 : this.p2;
-                    const receiver = isP1 ? this.p2 : this.p1;
-
-                    // 3. Update State
+                    // Update Transcript
                     this.transcript.push({
                         username: sender.username,
-                        text: finalVerseText, 
-                        originalAudio: !!event.audioData,
-                        isLate: isLate,
+                        text: finalVerseText,
                         round: Math.ceil((this.transcript.length + 1) / 2)
                     });
 
-                    // 4. BRANCH: Is the Battle Over?
+                    // --- FIX: SEND ONLY TO OPPONENT AND SPECTATORS ---
+                    const versePayload = JSON.stringify({
+                        type: 'NEW_VERSE',
+                        verse: finalVerseText,
+                        audioData: event.audioData
+                    });
+
+                    // 1. Send to Opponent
+                    if (receiver) {
+                        try { receiver.socket.send(versePayload); } catch(e){}
+                    }
+
+                    // 2. Send to Spectators
+                    this.spectators.forEach(s => {
+                        try { s.socket.send(versePayload); } catch(e){}
+                    });
+
+                    // --- BATTLE OVER LOGIC ---
                     if (this.transcript.length >= totalTurnsNeeded) {
-                        // --- A. BATTLE ENDED ---
                         this.status = 'JUDGING';
-
-                        this.broadcast({ type: 'RESULT', result });
-
-                        this.status = 'FINISHED';
                         this.currentTurnOwner = null;
 
-                        // Send the final verse to the opponent so they can see it
-                        if (receiver) {
-                            receiver.socket.send(JSON.stringify({
-                                type: 'NEW_VERSE',
-                                verse: finalVerseText, 
-                                audioData: event.audioData,
-                                isTranscribed: !!event.audioData
-                            }));
+                        const hasSpectators = this.spectators.length > 0;
+                        const tasks = [this.runJudge(this.transcript, this.mandatoryWord)];
+
+                        if (hasSpectators) {
+                            this.broadcast({ type: 'START_VOTING', duration: 10 });
+                            tasks.push(new Promise(r => setTimeout(r, 10000)));
+                        } else {
+                            this.broadcast({ type: 'JUDGING' });
                         }
 
-                        // Broadcast "Judging" state to show loading screen
-                        this.broadcast({ type: 'JUDGING' });
+                        const [aiResult] = await Promise.all(tasks);
 
-                        // Run AI Judge
-                        const result = await this.runJudge(this.transcript, this.mandatoryWord);
-                        const savedID = await this.saveBattleToDB(result);
-                        result.battle_id = savedID;
+                        // Audience Scoring
+                        if (hasSpectators) {
+                            const totalVotes = this.votes.p1 + this.votes.p2;
+                            if (totalVotes > 0) {
+                                const p1Audience = Math.round((this.votes.p1 / totalVotes) * 40);
+                                const p2Audience = Math.round((this.votes.p2 / totalVotes) * 40);
+                                aiResult.scores.p1.audience = p1Audience;
+                                aiResult.scores.p2.audience = p2Audience;
+                                aiResult.scores.p1.total += p1Audience;
+                                aiResult.scores.p2.total += p2Audience;
+                            }
+                        }
 
-                        this.broadcast({ type: 'RESULT', result });
-                        await this.updateLeaderboard(result.winner);
+                        // Determine Winner
+                        if (aiResult.scores.p1.total > aiResult.scores.p2.total) {
+                            aiResult.winner = this.p1.username;
+                            aiResult.winnerCode = 'p1_win';
+                        } else if (aiResult.scores.p2.total > aiResult.scores.p1.total) {
+                            aiResult.winner = this.p2.username;
+                            aiResult.winnerCode = 'p2_win';
+                        } else {
+                            aiResult.winner = "Draw";
+                        }
+
+                        const savedID = await this.saveBattleToDB(aiResult);
+                        aiResult.battle_id = savedID;
+
+                        this.broadcast({ type: 'RESULT', result: aiResult });
+                        await this.updateLeaderboard(aiResult.winner);
+                        this.status = 'FINISHED';
                         
                     } else {
                         // --- B. BATTLE CONTINUES ---
                         this.currentTurnOwner = isP1 ? 'p2' : 'p1';
                         this.turnStartTime = Date.now();
+
+                        const receiver = isP1 ? this.p2 : this.p1;
 
                         // Send verse to opponent and tell them it's their turn
                         if (receiver) {
@@ -248,8 +312,11 @@ export class Challenge {
     }
 
     broadcast(message) {
-        this.sessions.forEach(s => {
-            try { s.send(JSON.stringify(message)); }  catch (e) {}
+        const payload = JSON.stringify(message);
+        if (this.p1) try { this.p1.socket.send(payload) } catch(e){}
+        if (this.p2) try { this.p2.socket.send(payload) } catch(e){}
+        this.spectators.forEach(s => {
+            try { s.socket.send(payload); }  catch (e) {}
         });
     }
 
@@ -347,16 +414,17 @@ export class Challenge {
                     hasWordBonus: hasWordBonus
                 })
             });
-            const userData = await userRes.json();
+            // 2. Update Leaderboard
+            const pointsEarned = 20 + (hasWordBonus ? 10 : 0);
 
             const lbId = this.env.LEADERBOARD.idFromName('GLOBAL_PVP');
             const lbStub = this.env.LEADERBOARD.get(lbId);
-            await stub.fetch('http://do/submit', {
+            await lbStub.fetch('http://do/submit', {
                 method: 'POST',
                 body: JSON.stringify({ 
                     username: winnerUsername, 
                     userId: winnerId,
-                    score: userData.pvp_score 
+                    score: pointsEarned 
                 })
             });
             

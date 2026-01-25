@@ -143,13 +143,37 @@ app.post('/battle/judge', async (c) => {
 
     const result = scores.user.total > scores.ai.total ? "win" : "loss";
 
-    // 3. BACKGROUND STATS UPDATE (Using waitUntil for speed)
+    let battleId = crypto.randomUUID();
+    if (c.env.DB) {
+        try {
+            await c.env.DB.prepare(`
+                INSERT INTO battles (id, p1_name, p2_name, p1_verse, p2_verse, winner, timestamp) 
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            `)
+            .bind(
+                battleId, 
+                "You", 
+                opponent?.name || "AI", 
+                userRap, 
+                aiVerse, 
+                result === 'win' ? "You" : (opponent?.name || "AI"), 
+                Date.now()
+            )
+            .run();
+        } catch (e) {
+            console.error("Failed to save single player battle:", e);
+            battleId = null;
+        }
+    }
+
+    // 3. BACKGROUND STATS UPDATE 
     const updateTask = async (uId) => {
         try {
             const id = c.env.USER_PROFILE.idFromName(uId);
             const stub = c.env.USER_PROFILE.get(id);
             const pointsValue = (opponent && opponent.points) ? opponent.points : 10;
             
+            // 1. Update Personal Profile
             const userUpdateRes = await stub.fetch('http://do/update', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -158,17 +182,24 @@ app.post('/battle/judge', async (c) => {
             
             const userData = await userUpdateRes.json();
             
-            // Update Leaderboard
-             if (userData.ai_score !== undefined) { 
+            // 2. Update Leaderboard (Add Points Earned)
+            if (result === 'win') {
                 let displayName = "Unknown";
                 if (c.env.DB) {
                     const u = await c.env.DB.prepare('SELECT mc_name FROM users WHERE id = ?').bind(uId).first();
                     if (u) displayName = u.mc_name;
                 }
+                
+                const totalPointsEarned = pointsValue + earnedWordBonus; 
+
                 const lbId = c.env.LEADERBOARD.idFromName("GLOBAL");
                 await c.env.LEADERBOARD.get(lbId).fetch('http://do/submit', {
                     method: 'POST',
-                    body: JSON.stringify({ username: displayName, userId: uId, score: userData.ai_score })
+                    body: JSON.stringify({ 
+                        username: displayName, 
+                        userId: uId, 
+                        score: totalPointsEarned // Send just the points to add
+                    })
                 });
             }
         } catch(e) { console.error(e); }
