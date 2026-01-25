@@ -49,6 +49,7 @@ function RapBattleApp() {
     const [isQueuing, setIsQueuing] = useState(false);
     const [isOpponentTyping, setIsOpponentTyping] = useState(false);
     const typingTimeoutRef = useRef(null);
+	const [turnCount, setTurnCount] = useState(0);
     
     // ARENA STATE
     const [isMyTurn, setIsMyTurn] = useState(false);
@@ -74,10 +75,11 @@ function RapBattleApp() {
 		if (mode === 'create_success' && ws.current && ws.current.readyState === WebSocket.OPEN) {
 			ws.current.send(JSON.stringify({
 				type: 'UPDATE_SETTINGS',
-				rounds: parseInt(rounds)
+				rounds: parseInt(rounds),
+				battleMode: battleMode
 			}));
 		}
-	}, [rounds, mode])
+	}, [rounds, battleMode, mode])
     useEffect(() => {
         if (user) {
             fetchStats(user.id);
@@ -99,18 +101,26 @@ function RapBattleApp() {
 
 	useEffect(() => {
 		let interval = null;
+		
 		if (mode === 'arena' && isMyTurn) {
-			if (timeLeft > 0) {
-				interval = setInterval(() => {
-					setTimeLeft((prev) => prev - 1);
-				}, 1000);
-			} else if (timeLeft === 0 && !hasAutoSubmitted.current) {
-				hasAutoSubmitted.current = true;
-				submitTurn("(Time ran out!)");
-			}
+			interval = setInterval(() => {
+				setTimeLeft((prev) => {
+					if (prev <= 1) {
+						clearInterval(interval);
+						// Only auto-submit if we haven't already for THIS SPECIFIC turn
+						if (!hasAutoSubmitted.current) {
+							hasAutoSubmitted.current = true;
+							submitTurn("(CHOKED: Time Ran Out)");
+						}
+						return 0;
+					}
+					return prev - 1;
+				});
+			}, 1000);
 		}
+
 		return () => clearInterval(interval);
-	}, [mode, isMyTurn, timeLeft]);
+	}, [isMyTurn, turnCount, mode]);
 
 	const handleManualPlay = (log) => {
 		if (log.audio) {
@@ -463,8 +473,10 @@ function RapBattleApp() {
                 setIsMyTurn(msg.yourTurn);
                 setBattleLog([]);
                 setTimeLeft(30);
+				if (msg.battleMode) setBattleMode(msg.battleMode);
+				if (msg.rounds) setRounds(msg.rounds);
                 if (msg.mandatoryWord) { setTargetWord(msg.mandatoryWord); setWordMode(true); }
-                setMode('arena'); // <--- UNIFIED SCREEN
+                setMode('arena');
             }
 
             // --- RECEIVE TURN ---
@@ -474,6 +486,10 @@ function RapBattleApp() {
                 
                 // My Turn Now
                 setIsMyTurn(true);
+
+				setTimeLeft(30);
+				setTurnCount(prev => prev + 1);
+				hasAutoSubmitted.current = false;
             }
 
             if (msg.type === 'OPPONENT_TYPING') {
@@ -808,7 +824,7 @@ function RapBattleApp() {
                                         <Stack gap="md">
                                             <Group justify="space-between">
                                                 <Group>
-                                                    <Avatar src={p1Data?.id ? `/avatar/${p1Data?.id}?t=${Date.now()}` : null} radius="xl" color="blue">{p1Data?.name?.[0]}</Avatar>
+                                                    <Avatar src={p1Data?.id ? `/avatar/${user.id}` : null} radius="xl" color="blue">{p1Data?.name?.[0]}</Avatar>
                                                     <Stack gap={0}>
                                                         <Text size="xs" c="dimmed">OPPONENT</Text>
                                                         <Title order={5}>{p1Data?.name || "Unknown"}</Title>

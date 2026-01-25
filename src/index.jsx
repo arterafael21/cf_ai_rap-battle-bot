@@ -268,42 +268,55 @@ app.post('/onboarding/update', async (c) => {
 // --- ONBOARDING: UPLOAD IMAGE ---
 app.post('/onboarding/upload', async (c) => {
     let userId;
-    try { userId = await verifyAuth(c); } 
-    catch (e) { return c.json({ error: e.message }, 401); }
+    try { 
+        userId = await verifyAuth(c); 
+    } catch (e) { 
+        return c.json({ error: e.message }, 401); 
+    }
 
+    // 1. CRITICAL: Use parseBody() for Multipart Form Data (Images)
     const formData = await c.req.parseBody();
     const imageFile = formData['image'];
-    if (!imageFile) return c.json({ error: 'No image provided' }, 400);
 
-    const arrayBuffer = await imageFile.arrayBuffer();
-    const inputs = {
-        image: [...new Uint8Array(arrayBuffer)],
-        prompt: "Analyze this image for a roast battle caricature. Focus harshly on specific details of clothing choices, hair style, accessories, and general vibe that could be mocked. Be brief, specific, and brutally honest."
-    };
-
-    let roastContext = "";
-    try {
-        const aiRes = await c.env.AI.run('@cf/meta/llama-3.2-11b-vision-instruct', inputs);
-        roastContext = aiRes.response || 'A mystery rapper';
-    } catch (e) {
-        console.error("Vision AI Failed", e);
-        roastContext = 'No photo provided';
+    if (!imageFile || !(imageFile instanceof File)) {
+        return c.json({ error: 'No valid image provided' }, 400);
     }
 
     try {
-        if (c.env.AVATAR_BUCKET) await c.env.AVATAR_BUCKET.put(userId + ".png", arrayBuffer);
+        const arrayBuffer = await imageFile.arrayBuffer();
         
-        const existing = await c.env.DB.prepare('SELECT * FROM users WHERE id=?').bind(userId).first();
-        if (existing) {
-            await c.env.DB.prepare('UPDATE users SET roast_context=? WHERE id=?').bind(roastContext, userId).run();
-        } else {
-            await c.env.DB.prepare('INSERT INTO users (id, roast_context, created_at) VALUES (?, ?, ?)')
-                .bind(userId, roastContext, Date.now()).run();
+        // 2. Size Check (D1 has a 1MB limit per row by default)
+        if (arrayBuffer.byteLength > 1024 * 1024) {
+            return c.json({ error: 'Image too large. Max 1MB.' }, 400);
         }
-    } catch (e) { return c.json({ error: "DB Error" }, 500); }
 
-    return c.json({ success: true, description: roastContext });
-})
+        const bytes = new Uint8Array(arrayBuffer);
+        
+        // 3. Convert to Base64 for DB Storage
+        let binary = '';
+        for (let i = 0; i < bytes.byteLength; i++) {
+            binary += String.fromCharCode(bytes[i]);
+        }
+        const base64String = `data:${imageFile.type};base64,${btoa(binary)}`;
+
+        // 4. Save to Database
+        const query = `
+            INSERT INTO users (id, avatar_base64, created_at) 
+            VALUES (?, ?, ?) 
+            ON CONFLICT(id) DO UPDATE SET avatar_base64 = excluded.avatar_base64
+        `;
+        
+        await c.env.DB.prepare(query)
+            .bind(userId, base64String, Date.now())
+            .run();
+
+        return c.json({ success: true });
+
+    } catch (e) {
+        console.error("Upload Logic Error:", e.message);
+        return c.json({ error: "Failed to process image: " + e.message }, 500);
+    }
+});
 
 app.get('/ws/queue', async (c) => {
 	const id = c.env.MATCHMAKER.idFromName('GLOBAL_QUEUE');
@@ -315,19 +328,57 @@ app.get('/avatar/:userId', async (c) => {
 	const userId = c.req.param('userId');
 	if (!c.env.AVATAR_BUCKET) return c.text('No Bucket', 500);
 
-	// try to get file
-	const object = await c.env.AVATAR_BUCKET.get(userId + '.png');
-	if (!object) {
-		return c.text('No Avatar', 404);
-	}
+    const user = await c.env.DB.prepare('SELECT avatar_base64 FROM users WHERE id=?').bind(userId).first();
 
-	const headers = new Headers();
-	object.writeHttpMetadata(headers);
-	headers.set('etag', object.httpEtag);
-	headers.set('Cache-Control', 'private, max-age=0, no-cache');
+    if (!user) {
+        return c.text('No avatar', 404);
+    }
 
-	return new Response(object.body, { headers });
+	const matches = user.avatar_base64.match(/^data:(.+);base64,(.+)$/);
+    if (!matches || matches.length !== 3) return c.text('Invalid Image Data', 500);
+
+	const contentType = matches[1];
+    const b64Data = matches[2];
+    const binaryStr = atob(b64Data);
+    const len = binaryStr.length;
+    const bytes = new Uint8Array(len);
+    for (let i = 0; i < len; i++) bytes[i] = binaryStr.charCodeAt(i);
+
+	return new Response(bytes.buffer, {
+        headers: {
+            'Content-Type': contentType,
+            'Cache-Control': 'public, max-age=604800'
+        }
+    });
 })
+
+// --- ADMIN RESET ROUTE ---
+app.get('/admin/nuke', async (c) => {
+    try {
+        // 1. CLEAR D1 DATABASE (Identity & History)
+        if (c.env.DB) {
+            await c.env.DB.prepare('DELETE FROM battles').run();
+            await c.env.DB.prepare('DELETE FROM users').run(); 
+        }
+
+        // 2. RESET GLOBAL LEADERBOARDS (Durable Objects)
+        const resetDO = async (namespace, idName) => {
+            try {
+                const id = namespace.idFromName(idName);
+                const stub = namespace.get(id);
+                
+                await stub.fetch('http://do/reset'); 
+            } catch(e) { console.log("DO Reset Error", e); }
+        };
+
+        await resetDO(c.env.LEADERBOARD, "GLOBAL");
+        await resetDO(c.env.LEADERBOARD, "GLOBAL_PVP");
+
+        return c.json({ status: "System Wiped. Now go delete users in Clerk Dashboard." });
+    } catch (e) {
+        return c.json({ error: e.message }, 500);
+    }
+});
 
 export default app;
 export { UserProfile, Leaderboard, Challenge, Matchmaker };

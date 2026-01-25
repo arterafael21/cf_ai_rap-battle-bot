@@ -36,27 +36,32 @@ export class Matchmaker {
     }
 
     matchPlayers() {
-        // Get first two players
         const p1 = this.sessions.shift();
         const p2 = this.sessions.shift();
 
         if (!p1 || !p2) return;
 
-        // Generate Unique Battle Room ID
         const battleId = crypto.randomUUID();
-        console.log(`Match Found! Starting Battle ID: ${battleId}`);
+        
+        // --- RANDOMIZED MATCH SETTINGS ---
+        const rounds = Math.floor(Math.random() * 3) + 1; // 1 to 3 rounds
+        const turnTime = Math.floor(Math.random() * 16) + 15; // 15 to 30 seconds
+        const mandatoryWord = Math.random() > 0.5 ? getRandomWord() : null; // 50% chance of word
+        
+        const config = {
+            rounds,
+            turnTime,
+            mandatoryWord,
+            battleMode: 'text' 
+        };
 
-        // Assign roles
         try {
-            const msgP1 = JSON.stringify({ type: 'MATCH_FOUND', battleId, role: 'CREATE'});
-            const msgP2 = JSON.stringify({ type: 'MATCH_FOUND', battleId, role: 'JOIN'});
-
-            p1.send(msgP1);
-            p2.send(msgP2);
-
+            // Send config to Creator (P1) so they can init the room with it
+            p1.send(JSON.stringify({ type: 'MATCH_FOUND', battleId, role: 'CREATE', config }));
+            // Send config to Joiner (P2) just for their info (optional)
+            p2.send(JSON.stringify({ type: 'MATCH_FOUND', battleId, role: 'JOIN', config }));
         } catch (e) { console.error("Match send failed", e); }
         
-
         setTimeout(() => {
             try { p1.close(); } catch (e) {}
             try { p2.close(); } catch (e) {}

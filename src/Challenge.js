@@ -8,13 +8,17 @@ export class Challenge {
         this.p1 = null;
         this.p2 = null;
 
-        // Battle Config
+        // Default Config
         this.mandatoryWord = null; 
-        this.rounds = 1;
+        this.rounds = 1; 
+        this.turnTime = 30; 
         this.transcript = [];
+        this.turnStartTime = Date.now();
+        this.battleMode = 'text';
 
+        // Initialize turn owner
+        this.currentTurnOwner = 'p1'; 
         this.status = 'OPEN';
-        this.finalResult = null;
     }
 
     async fetch (request) {
@@ -45,9 +49,15 @@ export class Challenge {
 
                     if (event.role === 'CREATE') {
                         this.p1 = player;
+                        // APPLY SETTINGS IMMEDIATELY
+                        if (event.settings) {
+                            if (event.settings.rounds) this.rounds = parseInt(event.settings.rounds);
+                            if (event.settings.turnTime) this.turnTime = parseInt(event.settings.turnTime);
+                            if (event.settings.battleMode) this.battleMode = event.settings.battleMode;
+                            if (event.settings.mandatoryWord) this.mandatoryWord = event.settings.mandatoryWord;
+                        }
                     } else {
                         this.p2 = player;
-                        // Notify P1 that P2 joined
                         if (this.p1) {
                             try {
                                 this.p1.socket.send(JSON.stringify({
@@ -57,59 +67,78 @@ export class Challenge {
                                 }));
                             } catch (e) {}
                         }
-                        // START MATCH IMMEDIATELY
                         this.startMatch();
                     }
                 }
 
-                // --- UPDATE SETTINGS ---
-                if (event.type === 'UPDATE_SETTINGS' && this.p1 && this.p1.socket === webSocket) {
-                    if (event.rounds) this.rounds = event.rounds;
-                }
-
-                // --- 2. TYPING INDICATOR ---
-                if (event.type === 'TYPING') {
-                    const other = (this.p1 && this.p1.socket === webSocket) ? this.p2 : this.p1;
-                    if (other) other.socket.send(JSON.stringify({ type: 'OPPONENT_TYPING' }));
-                }
-
-                // --- 3. SUBMIT TURN ---
+                // --- 2. SUBMIT TURN ---
                 if (event.type === 'SUBMIT_TURN') {
                     const isP1 = (this.p1 && this.p1.socket === webSocket);
-                    const sender = isP1 ? this.p1 : this.p2;
-                    const receiver = isP1 ? this.p2 : this.p1
                     
-                    // Add to Transcript
+                    const expectedTurn = isP1 ? 'p1' : 'p2';
+                    if (this.currentTurnOwner !== expectedTurn) return;
+
+                    let finalVerseText = event.verse || "";
+
+                    if (event.audioData && this.env.AI) {
+                        try {
+                            const base64 = event.audioData.split(',')[1] || event.audioData;
+                            const binaryString = atob(base64);
+                            const bytes = new Uint8Array(binaryString.length);
+                            for (let i = 0; i < binaryString.length; i++) {
+                                bytes[i] = binaryString.charCodeAt(i);
+                            }
+                            const aiResponse = await this.env.AI.run('@cf/openai/whisper', {
+                                audio: [...bytes]
+                            });
+                            if (aiResponse.text) finalVerseText = aiResponse.text;
+                        } catch (e) {
+                            console.error("Transcription Failed", e);
+                            finalVerseText += " [Audio Transcription Failed]";
+                        }
+                    }
+
+                    const timeTaken = (Date.now() - this.turnStartTime) / 1000;
+                    const isLate = timeTaken > (this.turnTime + 5); 
+
+                    const sender = isP1 ? this.p1 : this.p2;
+                    const receiver = isP1 ? this.p2 : this.p1;
+                    
                     this.transcript.push({
                         username: sender.username,
-                        text: event.verse,
+                        text: finalVerseText, 
+                        originalAudio: !!event.audioData,
+                        isLate: isLate,
                         round: Math.ceil((this.transcript.length + 1) / 2)
                     });
+                    
+                    this.currentTurnOwner = isP1 ? 'p2' : 'p1';
+                    this.turnStartTime = Date.now();
 
-                    // Forward to opponent immediately
                     if (receiver) {
                         receiver.socket.send(JSON.stringify({
                             type: 'NEW_VERSE',
-                            verse: event.verse,
-                            audioData: event.audioData
+                            verse: finalVerseText, 
+                            audioData: event.audioData,
+                            isTranscribed: !!event.audioData
                         }));
                     }
                     
-                    // Check Game End
-                    // Total turns needed = rounds * 2
-                    if (this.transcript.length >= this.rounds * 2) {
-                        // END GAME
+                    const totalTurnsNeeded = this.rounds * 2;
+                    
+                    if (this.transcript.length >= totalTurnsNeeded) {
                         this.broadcast({ type: 'JUDGING' });
-
                         const result = await this.runJudge(this.transcript, this.mandatoryWord);
-
-                        // Save result
                         const savedID = await this.saveBattleToDB(result);
                         result.battle_id = savedID;
-
                         this.broadcast({ type: 'RESULT', result });
-                        await this.updateLeaderboard(result.winner)
+                        await this.updateLeaderboard(result.winner);
                     }
+                }
+
+                if (event.type === 'TYPING') {
+                    const other = (this.p1 && this.p1.socket === webSocket) ? this.p2 : this.p1;
+                    if (other) other.socket.send(JSON.stringify({ type: 'OPPONENT_TYPING' }));
                 }
 
             } catch (err) { console.error("WS Error", err); }
@@ -127,12 +156,16 @@ export class Challenge {
     startMatch() {
         if (!this.p1 || !this.p2) return;
 
-        // Broadcast Start with Config
         const startMsg = { 
             type: 'MATCH_START', 
-            mandatoryWord: this.mandatoryWord ,
-            rounds: this.rounds
+            mandatoryWord: this.mandatoryWord,
+            rounds: this.rounds,
+            turnTime: this.turnTime,
+            battleMode: this.battleMode
         };
+
+        this.currentTurnOwner = 'p1'; 
+        this.turnStartTime = Date.now(); 
 
         try {
             this.p1.socket.send(JSON.stringify({ ...startMsg, yourTurn: true }));
@@ -148,55 +181,36 @@ export class Challenge {
 
     async runJudge(transcript, word) {
         try {
-            // 1. Only include word instructions if a real word exists
-            let battleText = transcript.map(t => `${t.username}: "${t.text}"`).join('\n');
+            let battleText = transcript.map(t => {
+                const penaltyNote = t.isLate ? " [PENALTY: LATE]" : "";
+                return `MC ${t.username}: "${t.text}"${penaltyNote}`;
+            }).join('\n');
 
+            let wordInstructions = '';
             if (word && word !== 'NONE') {
-                wordInstructions = `
-                MANDATORY CHALLENGE:
-                - The word is: "${word}".
-                - CHECK CAREFULLY: Did the rapper use this exact word?
-                - If YES: Add +10 points to their total score.
-                - If NO: 0 bonus points.
-                `;
+                wordInstructions = `MANDATORY WORD: "${word}". If used +10 points. If not 0 bonus.`;
             }
 
-            // 2. PROMPT
             const prompt = `
-                You are the Supreme Battle Rap Judge. You must evaluate two verses based on this strict rubric. 
+                Act as a professional Battle Rap Judge.
                 
                 TRANSCRIPT:
                 ${battleText}
 
                 ${wordInstructions}
 
-                SCORING RUBRIC (0-10 per category):
-                1. RHYME SCHEME (1-10): 
-                - 1-3: No rhymes or very simple single-syllable rhymes (cat/hat).
-                - 4-7: Standard end-rhymes, some multi-syllabic attempts.
-                - 8-10: Complex multis, internal rhymes, and dense patterns.
-                
-                2. FLOW & METER (1-10):
-                - 1-3: Clunky, too many/few syllables, hard to read.
-                - 4-7: Standard readable rhythm.
-                - 8-10: Excellent cadence, rides the beat perfectly in text form.
+                RUBRIC (0-10 each):
+                1. Rhyme Scheme (Complexity)
+                2. Flow (Readability/Rhythm)
+                3. Bars (Punchlines/Creativity)
+                4. Aggression (Direct attacks)
 
-                3. BARS & CREATIVITY (1-10):
-                - 1-3: Generic insults ("you are bad"), clichés.
-                - 4-7: Good punchlines, standard metaphors.
-                - 8-10: Double entendres, clever wordplay, original angles.
-
-                4. AGGRESSION/DEFENSE (1-10):
-                - Did they actually address the opponent or just rap generic lines?
-                - 8-10 requires direct, relevant counters or brutal roasts.
-
-                OUTPUT FORMAT:
-                You must output ONLY valid JSON. Do not write anything else.
+                RETURN JSON ONLY:
                 {
-                    "p1_score": number (total sum + bonus),
-                    "p2_score": number (total sum + bonus),
-                    "winner": "Username of Winner"
-                    "comment": "A 2-sentence summary of why the winner won. Be critical and specific."
+                    "p1_score": number,
+                    "p2_score": number,
+                    "winner": "Username or 'Draw'",
+                    "comment": "Critical 2-sentence summary."
                 }
             `;
 
@@ -204,15 +218,8 @@ export class Challenge {
                 messages: [{ role: 'user', content: prompt }]
             });
 
-            if (!res || !res.response) {
-                throw new Error('Empty response from judge')
-            }
-
             const match = res.response.match(/\{[\s\S]*\}/);
-            if (!match) {
-                console.error('Judge Output Invalid', res.response);
-                return { winner: 'Draw', scores: { comment: 'Judge was confused.', p1_score: 5, p2_score: 5 } };
-            }
+            if (!match) throw new Error("Invalid JSON");
             const data = JSON.parse(match[0]);
 
             return {
@@ -223,10 +230,10 @@ export class Challenge {
             };
         } catch (e) {
             console.error("Judge Exception", e);
-            return { winner: 'Draw', scores: { comment: "Judge Glitched", p1_score: 0, p2_score: 0 } };
+            return { winner: 'Draw', scores: { comment: "Judging Error", p1_score: 0, p2_score: 0 } };
         }
     }
-
+    
     async updateLeaderboard(winnerUsername) {
         if (!winnerUsername || winnerUsername === "Draw") return;
 
@@ -235,7 +242,6 @@ export class Challenge {
             const userId = this.env.USER_PROFILE.idFromName(winnerUsername);
             const userStub = this.env.USER_PROFILE.get(userId);
 
-            // 1. UDPATE PROFILE
             const userRes = await userStub.fetch('http://do/update', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -247,7 +253,6 @@ export class Challenge {
             });
             const userData = await userRes.json();
 
-            // 2. SUBMIT TO PVP LEADERBOARD
             const id = this.env.LEADERBOARD.idFromName('GLOBAL_PVP');
             const stub = this.env.LEADERBOARD.get(id);
             await stub.fetch('http://do/submit', {
@@ -261,34 +266,14 @@ export class Challenge {
     }
 
     async saveBattleToDB(result) {
-        if (!this.env.DB) {
-            console.error("D1 Database binding 'DB' not found");
-            return null;
-        }
-
+        if (!this.env.DB) return null;
         const battleID = crypto.randomUUID();
-
         try {
-            const query = `
-                INSERT INTO battles (id, p1_name, p2_name, p1_verse, p2_verse, winner, timestamp)
-                VALUES (?, ?, ?, ?, ?, ?, ?)
-            `;
-
+            const query = `INSERT INTO battles (id, p1_name, p2_name, p1_verse, p2_verse, winner, timestamp) VALUES (?, ?, ?, ?, ?, ?, ?)`;
             await this.env.DB.prepare(query)
-                .bind(
-                    battleID,
-                    this.p1.username,
-                    this.p2.username,
-                    this.p1.verse,
-                    this.p2.verse,
-                    result.winner,
-                    Date.now()
-                )
+                .bind(battleID, this.p1.username, this.p2.username, this.p1.verse, this.p2.verse, result.winner, Date.now())
                 .run();
             return battleID;
-        } catch (e) {
-            console.error('Failed to save battle to D1', e);
-            return null;
-        }
+        } catch (e) { return null; }
     }
 }

@@ -7,7 +7,12 @@ export class Leaderboard extends DurableObject {
     }
 
     async fetch(request) {
-        const url = new URL(request.url);
+        const url = new URL(request.url)
+        
+        if (url.pathname === '/reset') {
+            await this.storage.deleteAll();
+            return new Response("Reset");
+        }
 
         // --- SUBMIT SCORE ---
         if (request.method === 'POST' && url.pathname === '/submit') {

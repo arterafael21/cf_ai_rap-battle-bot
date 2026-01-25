@@ -15,6 +15,7 @@
 	},
 	"dependencies": {
 		"@clerk/backend": "^2.29.5",
+		"@mantine/notifications": "^8.3.13",
 		"hono": "^4.11.5"
 	}
 }

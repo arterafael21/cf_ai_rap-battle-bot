@@ -14,7 +14,7 @@ import { OPPONENTS } from '../../src/constants';
 // --- SUB-COMPONENTS ---
 
 export const AppHeader = ({ user, isLoaded, identity, stats, avatarTs, onLogout }) => {
-    const avatarUrl = user ? `/avatar/${user.id}?t=${avatarTs}` : null;
+    const avatarUrl = user ? `/avatar/${user.id}` : null;
 
     return (
         <Stack align="center" gap="xl" mb={30} mt="lg">
