@@ -50,6 +50,7 @@ function RapBattleApp() {
     const [status, setStatus] = useState('Ready');
     const [isRecording, setIsRecording] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+    const [readyAudioIds, setReadyAudioIds] = useState(new Set());
 
     const [mode, setMode] = useState('menu');
     const [battleCode, setBattleCode] = useState(''); 
@@ -82,6 +83,7 @@ function RapBattleApp() {
     const [wordMode, setWordMode] = useState(false);
 
     const ws = useRef(null);
+	const [isPlaying, setIsPlaying] = useState(false);
     const [recordedBlob, setRecordedBlob] = useState(null);
     const [timer, setTimer] = useState(30);
     const timerRef = useRef(null);
@@ -167,7 +169,7 @@ function RapBattleApp() {
 		if (log.audio) {
 			new Audio(log.audio).play();
 		} else {
-			playAudio(`msg-${Date.now()}`, log.text, 'bytebeater');
+			loadAndPlayAudio(`msg-${Date.now()}`, log.text, 'bytebeater');
 		}
 	};
 
@@ -360,34 +362,42 @@ function RapBattleApp() {
     const handleBattle = async () => {
         if (!user) return alert("Please sign in!");
         if (!input) return alert('Freestyle something!');
+
+        console.log("[Battle] >>> Flow Started: Parallel Generate + TTS");
         
         setIsLoading(true);
         setStatus('Sending Verse...');
-		setLastBattle(null);
+        console.log("[Battle] Step 1: Generating AI Verse...");
 
         try {
             const token = await getToken(); 
-			const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
+            const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
             
-			// 1. GENERATE VERSE
-			const genRes = await fetch('/battle/generate', {
+            // 1. GENERATE VERSE
+            const genRes = await fetch('/battle/generate', {
                 method: 'POST',
                 headers,
                 body: JSON.stringify({ userRap: input, opponent }),
             });
             const genData = await genRes.json();
 
-			// UPDATE UI: Show verse immediately!
-			setLastBattle({
+            setLastBattle({
                 userRap: genData.userRap,
                 aiVerse: genData.aiVerse,
                 opponent: genData.opponent.name,
-                scores: null // Indicates "Judging in Progress"
+                scores: null 
             });
-			setInput('');
 
-            // STEP 2: JUDGE
-            setStatus('Judging Rap...');
+            console.log("[Battle] Step 2: Triggering TTS (Parallel)");
+
+            setInput('');
+
+            // 2. TRIGGER TTS (Background - Don't await yet!)
+            console.log("[Battle] Initiating TTS Pre-generation...");
+            const audioPromise = loadAndPlayAudio('last-battle', genData.aiVerse, opponent, true);
+
+            // 3. JUDGE (Happens while audio is fetching)
+            console.log("[Battle] Step 3: Requesting Judge...");            setStatus('Judging Rap...');
             const judgeRes = await fetch('/battle/judge', {
                 method: 'POST',
                 headers,
@@ -399,67 +409,103 @@ function RapBattleApp() {
                 }),
             });
             const judgeData = await judgeRes.json();
+            console.log("[Battle] Judge Scores Received.");
 
-			// UPDATE UI: Show final scores
-			setLastBattle(prev => ({
+            setLastBattle(prev => ({
                 ...prev,
                 scores: judgeData.scores,
                 result: judgeData.result,
                 battleId: judgeData.battleId
             }));
 
-			setStatus('Ready');
-			saveHistory({ 
-				...genData, 
-				...judgeData, 
-				id: `battle-${Date.now()}`,
-				myPoints: judgeData.pointsEarned
-			});
-			if (wordMode) refreshWord();
-			fetchLeaderboard();
+            setStatus('Ready');
+            saveHistory({ 
+                ...genData, 
+                ...judgeData, 
+                id: `battle-${Date.now()}`,
+                myPoints: judgeData.pointsEarned
+            });
+
+            // 4. WAIT FOR TTS TO FINISH
+            await audioPromise;
+            console.log("[Battle] Step 4: Judge and TTS finished.");
+
+            if (wordMode) refreshWord();
+            fetchLeaderboard();
         } catch (e) { 
-			alert(e.message); 
-			setStatus('Error'); 
-		} finally {
-        	setIsLoading(false);
-		}
+            alert(e.message); 
+            setStatus('Error'); 
+            console.error("[Battle] FATAL ERROR:", e);
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     // AUDIO LOGIC
-    const playAudio = async (battleId, text, character) => {
+    const loadAndPlayAudio = async (battleId, text, character, silent = false) => {
+        console.log(`[TTS] Request: ID=${battleId}, Character=${character}, Silent=${silent}`);
+
+        // 1. Check Cache
         if (audioCache.current[battleId]) {
-            new Audio(audioCache.current[battleId]).play();
+            console.log(`[TTS] Cache Hit for ${battleId}.`);
+            if (!silent) {
+                const audio = new Audio(audioCache.current[battleId]);
+                setIsPlaying(true);
+                audio.onended = () => setIsPlaying(false);
+                audio.play();
+            }
             return;
         }
-        setStatus('Playing Audio...');
+
         try {
-        const res = await fetch('/speak', {
-            method: 'POST', 
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ 
-                text, 
-                character: character
-            }),
-        });
+            console.log(`[TTS] Fetching from server...`);
+            const res = await fetch('/speak', {
+                method: 'POST', 
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text, character }),
+            });
 
-		if (!res.ok) {
-			const errData = await res.json();
-			throw new Error(errData.details || "Server failed to generate audio");
-		}
+            if (!res.ok) {
+                const errDetails = await res.json().catch(() => ({}));
+                console.error(`[TTS] Server 500 error:`, errDetails);
+                throw new Error("TTS Failed");
+            }
 
-        const blob = await res.blob();
-        if (blob.size < 100) { 
-            throw new Error("Audio blob is too small/invalid");
+            const blob = await res.blob();
+            console.log(`[TTS] Blob Received. Size: ${blob.size} bytes. Type: ${blob.type}`);
+
+            if (blob.size < 500) { 
+                console.warn(`[TTS] Very small blob received. Likely an error message in disguise.`);
+                throw new Error("Audio generation failed");
+            }
+
+            const url = URL.createObjectURL(blob);
+            audioCache.current[battleId] = url;
+            
+            // Mark as ready so the button "pops up"
+            setReadyAudioIds(prev => {
+                const next = new Set(prev);
+                next.add(battleId);
+                return next;
+            });
+
+            console.log(`[TTS] Audio Ready and Cached for ${battleId}`);
+
+            if (!silent) {
+                console.log(`[TTS] Triggering playback.`);
+                const audio = new Audio(url);
+                setIsPlaying(true);
+                audio.onended = () => {
+                    console.log(`[TTS] Playback finished.`);
+                    setIsPlaying(false);
+                };
+                await audio.play();
+            }
+        } catch (e) { 
+            console.error("[TTS] Critical Frontend Failure:", e); 
+            setIsPlaying(false); 
         }
-
-        const url = URL.createObjectURL(blob);
-        audioCache.current[battleId] = url;
-        
-        const audio = new Audio(url);
-        await audio.play();
-        setStatus('Ready');
-    } catch (e) { console.error("TTS Frontend Error", e); setStatus('Audio Failed'); }
-};
+    };
 
     const toggleMic = async () => { isRecording ? stopRecording() : startRecording(); };
 
@@ -1057,7 +1103,9 @@ function RapBattleApp() {
                                                 p2Verse={lastBattle.aiVerse}
                                                 p1Title="YOUR VERSE"
                                                 p2Title="AI RESPONSE"
-                                                onPlayAudio={() => playAudio('last-battle', lastBattle.aiVerse, opponent)}
+                                                onPlayAudio={() => loadAndPlayAudio('last-battle', lastBattle.aiVerse, opponent)} 
+                                                playDisabled={isPlaying}
+                                                isReady={readyAudioIds.has('last-battle')} // <--- Check the state here
                                             />
                                         </Card>
                                     )}
@@ -1498,7 +1546,7 @@ function RapBattleApp() {
 												<HistoryItem 
 													key={item.id} 
 													item={item} 
-													playAudio={playAudio} 
+													playAudio={loadAndPlayAudio} 
 													identity={identity} // <--- CRITICAL: Do not forget this!
 												/>
 											))}

@@ -161,7 +161,9 @@ export const VerseDisplay = ({
     p2Verse, 
     p1Title = "YOUR VERSE", 
     p2Title = "OPPONENT", 
-    onPlayAudio 
+    onPlayAudio,
+    playDisabled,
+    isReady
 }) => (
     <Grid>
         <Grid.Col span={{ base: 12, md: 6 }}>
@@ -183,24 +185,22 @@ export const VerseDisplay = ({
                         "{p2Verse}"
                     </Text>
                 </Card>
-                {onPlayAudio && (
+                {onPlayAudio && isReady && (
                     <Button 
                         variant="subtle" 
                         size="xs" 
                         leftSection={<IconMusic size={14}/>} 
                         onClick={onPlayAudio}
+                        loading={playDisabled}
+                        disabled={playDisabled}
                     >
-                        Play Audio
+                        {playDisabled ? "Speaking..." : "Listen to Bars"}
                     </Button>
                 )}
             </Stack>
         </Grid.Col>
     </Grid>
 );
-
-// In src/components.jsx
-
-// In src/components.jsx
 
 export const HistoryItem = ({ item, playAudio, identity }) => {
     // --- 1. DATA SANITIZATION (The Fix) ---
