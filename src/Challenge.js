@@ -214,19 +214,25 @@ export class Challenge {
                         let pointsEarned = 0; // Default 0
                         const wordBonus = this.mandatoryWord ? 10 : 0;
 
-                        if (aiResult.scores.p1.total > aiResult.scores.p2.total) {
+                        const p1Score = aiResult.scores.p1.total;
+                        const p2Score = aiResult.scores.p2.total;
+                        const winBonus = 20;
+
+                        if (p1Score > p2Score) {
                             aiResult.winner = this.p1.username;
                             aiResult.winnerCode = 'p1_win';
-                            // Calculate points for P1
-                            if (this.p1.username) pointsEarned = 20 + wordBonus;
-                        } else if (aiResult.scores.p2.total > aiResult.scores.p1.total) {
+                            // P1 Gets: Win Bonus + Their Score + Word Bonus
+                            if (this.p1.username) pointsEarned = winBonus + p1Score + wordBonus;
+                        } 
+                        else if (p2Score > p1Score) {
                             aiResult.winner = this.p2.username;
                             aiResult.winnerCode = 'p2_win';
-                            // Calculate points for P2
-                            if (this.p2.username) pointsEarned = 20 + wordBonus;
-                        } else {
+                            // P2 Gets: Win Bonus + Their Score + Word Bonus
+                            if (this.p2.username) pointsEarned = winBonus + p2Score + wordBonus;
+                        } 
+                        else {
                             aiResult.winner = "Draw";
-                            pointsEarned = 5; // Give 5 points for a draw? (Optional)
+                            pointsEarned = 10 + p1Score; // Draw gets small bonus + score
                         }
 
                         aiResult.pointsEarned = pointsEarned;

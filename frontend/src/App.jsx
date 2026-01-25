@@ -5,7 +5,7 @@ import {
 } from '@mantine/core';
 import { 
     IconMicrophone, IconMicrophoneOff, IconTrophy, IconSwords, IconUsers, IconSearch, IconArrowLeft, IconShare, IconKeyboard, IconMusic, IconUserCircle, IconEdit, IconSend, IconPlayerPlay,
-	IconNumber4Small
+	IconNumber4Small, IconRefresh
 } from '@tabler/icons-react';
 import '@mantine/core/styles.css';
 import { ClerkProvider, SignedIn, SignedOut, useUser, useAuth, useClerk, SignInButton } from "@clerk/clerk-react";
@@ -354,7 +354,7 @@ function RapBattleApp() {
         if (!input) return alert('Freestyle something!');
         
         setIsLoading(true);
-        setStatus('Sending Verse');
+        setStatus('Sending Verse...');
 		setLastBattle(null);
 
         try {
@@ -733,6 +733,47 @@ function RapBattleApp() {
 		}
 	}
 
+	const retryJudging = async () => {
+        if (!lastBattle) return;
+        
+        setIsLoading(true);
+        setStatus('Retrying Judge...');
+        
+        try {
+            const token = await getToken();
+            const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
+
+            // Re-send the EXACT same verses to the judge endpoint
+            const judgeRes = await fetch('/battle/judge', {
+                method: 'POST',
+                headers,
+                body: JSON.stringify({ 
+                    userRap: lastBattle.userRap, 
+                    aiVerse: lastBattle.aiVerse, 
+                    opponent: { name: lastBattle.opponent, points: 10 }, // Basic fallback if opponent object missing
+                    mandatoryWord: wordMode ? targetWord : null
+                }),
+            });
+            const judgeData = await judgeRes.json();
+
+            setLastBattle(prev => ({
+                ...prev,
+                scores: judgeData.scores,
+                result: judgeData.result,
+                battleId: judgeData.battleId
+            }));
+            
+            saveHistory({ ...lastBattle, ...judgeData, id: `battle-${Date.now()}` });
+            fetchLeaderboard();
+
+        } catch (e) {
+            alert("Retry failed: " + e.message);
+        } finally {
+            setIsLoading(false);
+            setStatus('Ready');
+        }
+    };
+
 	if (showOnboarding) {
 		return (
 			<OnboardingFlow
@@ -867,58 +908,110 @@ function RapBattleApp() {
                                                 )}
                                             </Group>
 
-                                            {/* SECTION 1: SCOREBOARD (OR SKELETON) */}
-                                            {lastBattle.scores ? (
-                                                <>
-                                                    <Grid>
-													{/* USER SCORE CARD */}
-													<Grid.Col span={6}>
-														<Card bg="white" withBorder h="100%">
-															<Text size="xs" c="dimmed" fw={700}>YOU ({identity?.mc_name || 'User'})</Text>
-															<Title order={2} c="blue">{lastBattle.scores.user.total}</Title>
-															
-															<Stack gap={2} mt={5}>
-																<Group justify="space-between"><Text size="xs">Rhyme:</Text><Text size="xs" fw={700}>{lastBattle.scores.user.rhyme}</Text></Group>
-																<Group justify="space-between"><Text size="xs">Flow:</Text><Text size="xs" fw={700}>{lastBattle.scores.user.flow}</Text></Group>
-																<Group justify="space-between"><Text size="xs">Roasts:</Text><Text size="xs" fw={700}>{lastBattle.scores.user.insults}</Text></Group>
-																<Group justify="space-between"><Text size="xs">Creative:</Text><Text size="xs" fw={700}>{lastBattle.scores.user.creativity}</Text></Group>
-																{lastBattle.scores.user.word_bonus > 0 && (
-																	<Group justify="space-between"><Text size="xs" c="orange" fw={700}>Word Bonus:</Text><Text size="xs" c="orange" fw={700}>+10</Text></Group>
-																)}
-															</Stack>
-														</Card>
-													</Grid.Col>
+                                            {/* SECTION 1: SCOREBOARD */}
+											{lastBattle.scores ? (
+												<>
+													<Grid>
+														{/* USER SCORE CARD */}
+														<Grid.Col span={6}>
+															<Card bg="white" withBorder h="100%">
+																<Text size="xs" c="dimmed" fw={700}>YOU ({identity?.mc_name || 'User'})</Text>
+																<Title order={2} c="blue">
+																	{lastBattle.scores.user.total || 0}
+																</Title>
+																
+																<Stack gap={2} mt={5}>
+																	<Group justify="space-between">
+																		<Text size="xs">Rhyme:</Text>
+																		<Text size="xs" fw={700}>{lastBattle.scores.user.rhyme || 0}</Text>
+																	</Group>
+																	<Group justify="space-between">
+																		<Text size="xs">Flow:</Text>
+																		<Text size="xs" fw={700}>{lastBattle.scores.user.flow || 0}</Text>
+																	</Group>
+																	<Group justify="space-between">
+																		<Text size="xs">Roasts:</Text>
+																		<Text size="xs" fw={700}>{lastBattle.scores.user.insults || 0}</Text>
+																	</Group>
+																	<Group justify="space-between">
+																		<Text size="xs">Creative:</Text>
+																		<Text size="xs" fw={700}>{lastBattle.scores.user.creativity || 0}</Text>
+																	</Group>
+																	
+																	{/* Word Bonus Display */}
+																	{lastBattle.scores.user.word_bonus > 0 && (
+																		<Group justify="space-between">
+																			<Text size="xs" c="orange" fw={700}>Word Bonus:</Text>
+																			<Text size="xs" c="orange" fw={700}>+10</Text>
+																		</Group>
+																	)}
+																</Stack>
+															</Card>
+														</Grid.Col>
 
-													{/* AI SCORE CARD */}
-													<Grid.Col span={6}>
-														<Card bg="white" withBorder h="100%">
-															<Text size="xs" c="dimmed" fw={700}>{lastBattle.opponent.toUpperCase()}</Text>
-															<Title order={2} c="red">{lastBattle.scores.ai.total}</Title>
-															
-															<Stack gap={2} mt={5}>
-																<Group justify="space-between"><Text size="xs">Rhyme:</Text><Text size="xs" fw={700}>{lastBattle.scores.ai.rhyme}</Text></Group>
-																<Group justify="space-between"><Text size="xs">Flow:</Text><Text size="xs" fw={700}>{lastBattle.scores.ai.flow}</Text></Group>
-																<Group justify="space-between"><Text size="xs">Roasts:</Text><Text size="xs" fw={700}>{lastBattle.scores.ai.insults}</Text></Group>
-																<Group justify="space-between"><Text size="xs">Creative:</Text><Text size="xs" fw={700}>{lastBattle.scores.ai.creativity}</Text></Group>
-															</Stack>
-														</Card>
-													</Grid.Col>
-												</Grid>
-                                                    <Text size="sm" mt="md" fs="italic" c="dimmed" ta="center">"{lastBattle.scores.comment}"</Text>
-                                                </>
-                                            ) : (
-                                                /* JUDGING SKELETON */
-                                                <Card bg="white" withBorder p="md">
-                                                    <Stack align="center" gap="md">
-                                                        <Loader size="md" type="bars" color="orange" />
-                                                        <Text c="dimmed" size="sm" fs="italic">The judges are reviewing the transcript...</Text>
-                                                        <Group style={{ width: '100%' }}>
-                                                            <Skeleton height={8} radius="xl" width="60%" />
-                                                            <Skeleton height={8} radius="xl" width="80%" />
-                                                        </Group>
-                                                    </Stack>
-                                                </Card>
-                                            )}
+														{/* AI SCORE CARD */}
+														<Grid.Col span={6}>
+															<Card bg="white" withBorder h="100%">
+																<Text size="xs" c="dimmed" fw={700}>{lastBattle.opponent?.toUpperCase() || "AI"}</Text>
+																<Title order={2} c="red">
+																	{lastBattle.scores.ai.total || 0}
+																</Title>
+																
+																<Stack gap={2} mt={5}>
+																	<Group justify="space-between">
+																		<Text size="xs">Rhyme:</Text>
+																		<Text size="xs" fw={700}>{lastBattle.scores.ai.rhyme || 0}</Text>
+																	</Group>
+																	<Group justify="space-between">
+																		<Text size="xs">Flow:</Text>
+																		<Text size="xs" fw={700}>{lastBattle.scores.ai.flow || 0}</Text>
+																	</Group>
+																	<Group justify="space-between">
+																		<Text size="xs">Roasts:</Text>
+																		<Text size="xs" fw={700}>{lastBattle.scores.ai.insults || 0}</Text>
+																	</Group>
+																	<Group justify="space-between">
+																		<Text size="xs">Creative:</Text>
+																		<Text size="xs" fw={700}>{lastBattle.scores.ai.creativity || 0}</Text>
+																	</Group>
+																</Stack>
+															</Card>
+														</Grid.Col>
+													</Grid>
+
+													{/* JUDGE'S COMMENT */}
+													<Text size="sm" mt="md" fs="italic" c="dimmed" ta="center">
+														"{lastBattle.scores.comment}"
+													</Text>
+
+													{/* RETRY BUTTON */}
+													{(lastBattle.scores.user.total === 0 && lastBattle.scores.ai.total === 0) && (
+														<Center mt="md">
+															<Button 
+																color="orange" 
+																variant="light" 
+																leftSection={<IconRefresh size={16} />} 
+																onClick={retryJudging}
+																loading={isLoading}
+															>
+																Retry Judging
+															</Button>
+														</Center>
+													)}
+												</>
+											) : (
+												/* JUDGING SKELETON*/
+												<Card bg="white" withBorder p="md">
+													<Stack align="center" gap="md">
+														<Loader size="md" type="bars" color="orange" />
+														<Text c="dimmed" size="sm" fs="italic">The judges are reviewing the transcript...</Text>
+														<Group style={{ width: '100%' }}>
+															<Skeleton height={8} radius="xl" width="60%" />
+															<Skeleton height={8} radius="xl" width="80%" />
+														</Group>
+													</Stack>
+												</Card>
+											)}
                                             
                                             <Divider my="md" />
 

@@ -59,3 +59,14 @@ export const OPPONENTS = {
         - EACH LINE MUST END IN A COMMA OR PERIOD to indicate breath control and flow.` 
     },
 };
+
+export const JUDGING_ERROR_MESSAGES = [
+    "The Judge spilled coffee on the scorecard.",
+    "Judge was drunk and fell asleep.",
+    "The Judge is currently arguing with a vending machine.",
+    "Scorecard lost in the metaverse.",
+    "The Judge was bribed with a ham sandwich.",
+    "Technical foul: Judge forgot how to count.",
+    "The AI Judge is having an existential crisis.",
+    "Judge refused to work without a beat drop."
+];

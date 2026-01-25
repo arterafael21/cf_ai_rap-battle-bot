@@ -4,7 +4,7 @@ import { verifyToken } from '@clerk/backend';
 import { UserProfile } from './UserProfile';
 import { Leaderboard } from './Leaderboard';
 import { Challenge } from './Challenge';
-import { getRandomWord, OPPONENTS } from '../src/constants'; 
+import { getRandomWord, JUDGING_ERROR_MESSAGES, OPPONENTS } from '../src/constants'; 
 import { Matchmaker } from './Matchmaker'
 
 const app = new Hono();
@@ -128,6 +128,7 @@ app.post('/battle/judge', async (c) => {
             const parsed = JSON.parse(jsonMatch[0].replace(/,\s*}/g, '}').replace(/\n/g, ' '));
             const u = parsed.user || {};
             const a = parsed.ai || {};
+            scores.comment = parsed.comment || "Close battle."
             
             // Calculate Totals
             scores.user = { ...u, total: (u.rhyme||0) + (u.flow||0) + (u.insults||0) + (u.creativity||0) + (u.word_bonus||0) };
@@ -139,9 +140,19 @@ app.post('/battle/judge', async (c) => {
                 scores.ai.total += opponent.difficultyModifier;
             }
         }
-    } catch (e) { console.error(e); }
+    } catch (e) {
+        console.error('Judge Parse Error:', e);
+        isError = true;
+        const randomMsg = JUDGING_ERROR_MESSAGES[Math.floor(Math.random() * JUDGING_ERROR_MESSAGES.length)]
+        scores.comment = randomMsg;
+    }
 
-    const result = scores.user.total > scores.ai.total ? "win" : "loss";
+    let result = "draw"; 
+    if (!isError) {
+        result = scores.user.total > scores.ai.total ? "win" : (scores.user.total < scores.ai.total ? "loss" : "draw");
+    }
+
+    result = scores.user.total > scores.ai.total ? "win" : "loss";
 
     let battleId = crypto.randomUUID();
     if (c.env.DB) {
@@ -164,6 +175,26 @@ app.post('/battle/judge', async (c) => {
             console.error("Failed to save single player battle:", e);
             battleId = null;
         }
+    }
+
+    // 1. Base Win Points against Bot
+    const baseWinPoints = (opponent && opponent.points) ? opponent.points : 10;
+    
+    // 2. Performance Points
+    const rapQualityPoints = scores.user.total || 0;
+    
+    // 3. Word Bonus
+    const earnedWordBonus = scores.user.word_bonus > 0 ? 10 : 0;
+
+    // 4. FINAL CALCULATION
+    let totalPointsEarned = 0;
+    
+    if (result === 'win') {
+        // WINNER GETS: Base + Quality + Bonus
+        totalPointsEarned = baseWinPoints + rapQualityPoints + earnedWordBonus;
+    } else {
+        // LOSER GETS: Just Quality + Pity Points
+        totalPointsEarned = 5 + Math.floor(rapQualityPoints / 2);
     }
 
     // 3. BACKGROUND STATS UPDATE 
@@ -198,7 +229,7 @@ app.post('/battle/judge', async (c) => {
                     body: JSON.stringify({ 
                         username: displayName, 
                         userId: uId, 
-                        score: totalPointsEarned // Send just the points to add
+                        score: totalPointsEarned 
                     })
                 });
             }
@@ -206,12 +237,9 @@ app.post('/battle/judge', async (c) => {
     };
 
     c.executionCtx.waitUntil(updateTask(userId));
-    const earnedWordBonus = scores.user.word_bonus > 0 ? 10 : 0;
-    const pointsValue = (opponent && opponent.points) ? opponent.points : 10;
-    const frontendPoints = result === 'win' ? (pointsValue + earnedWordBonus) : 0;
 
     // Return pointsEarned so Frontend can save it to history
-    return c.json({ result, scores, battleId, pointsEarned: frontendPoints });
+    return c.json({ result, scores, battleId, pointsEarned: totalPointsEarned });
 });
 
 app.post('/transcribe', async (c) => {

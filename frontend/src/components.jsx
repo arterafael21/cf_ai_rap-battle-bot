@@ -198,82 +198,68 @@ export const VerseDisplay = ({
     </Grid>
 );
 
-export function HistoryItem({ item, playAudio, identity }) {
-    // 1. Identify "Me" vs "Them"
-    // In Single Player, your name is often saved as "You" or matches your identity
-    const myName = identity?.mc_name || "You";
-    
-    // 2. Check Win Status
-    // We check multiple flags to be safe (legacy data vs new data)
-    const isWin = 
-        item.result === 'win' || 
-        item.winner === myName || 
-        item.winner === "You" ||
-        item.winnerCode === 'p1_win'; // Assuming P1 is always the user in history for now
+// In src/components.jsx
 
-    // 3. Extract Scores (Handle missing data safely)
-    // Single player usually saves as 'user'/'ai'. Multiplayer as 'p1'/'p2'.
+// In src/components.jsx
+
+export const HistoryItem = ({ item, playAudio, identity }) => {
+    // --- 1. DATA SANITIZATION ---
+    let opponentName = "Opponent";
+
+    if (item.p2_name && item.p2_name !== "AI") {
+        // Case A: Multiplayer 
+        opponentName = item.p2_name;
+    } 
+    else if (item.opponent && typeof item.opponent === 'object') {
+        // Case B: Full Object 
+        opponentName = item.opponent.name || "Unknown";
+    } 
+    else if (typeof item.opponent === 'string') {
+        // Case C: Legacy Data (Just "RoboFlow")
+        opponentName = item.opponent;
+    }
+
+    // --- 2. LOGIC ---
+    const isWin = item.result === 'win' || item.winner === identity?.mc_name || item.winnerCode === 'p1_win';
     const myScore = item.scores?.user?.total || item.scores?.p1?.total || 0;
     const oppScore = item.scores?.ai?.total || item.scores?.p2?.total || 0;
-
-    // 4. Calculate Points (Fallback for old battles)
-    // If 'myPoints' exists, use it. If not, and we won, assume 20 pts.
-    const displayPoints = item.myPoints !== undefined 
-        ? item.myPoints 
-        : (isWin ? 20 : 0);
+    const displayPoints = item.myPoints !== undefined ? item.myPoints : (isWin ? 20 : 0);
 
     return (
-        <Card shadow="sm" padding="lg" radius="md" withBorder mb="sm">
-            <Group justify="space-between" mb="xs">
+        <Card shadow="sm" padding="lg" radius="md" withBorder mb="lg">
+            <Group justify="space-between" mb="md">
                 <Stack gap={0}>
-                    <Text fw={700} size="sm">
-                        vs {item.opponent || item.p2_name || "Opponent"}
-                    </Text>
+                    <Text fw={700} size="lg">{opponentName}</Text>
                     <Text size="xs" c="dimmed">
                         {new Date(item.timestamp || Date.now()).toLocaleDateString()}
                     </Text>
                 </Stack>
-
+                
                 <Group gap="xs">
-                    {/* BATTLE SCORE (35 - 30) */}
                     {(myScore > 0 || oppScore > 0) && (
-                        <Badge variant="outline" color="gray">
+                        <Badge variant="outline" color="gray" size="lg">
                             {myScore} - {oppScore}
                         </Badge>
                     )}
 
-                    {/* POINTS EARNED (+20 pts) */}
-                    {isWin && (
-                        <Badge color="yellow" variant="filled">
-                            +{displayPoints} pts
-                        </Badge>
-                    )}
-                    {!isWin && (
-                        <Badge color="red" variant="light">
-                            Loss
-                        </Badge>
+                    {isWin ? (
+                        <Badge color="yellow" variant="filled" size="lg">+{displayPoints} pts</Badge>
+                    ) : (
+                        <Badge color="red" variant="light">Loss</Badge>
                     )}
                 </Group>
             </Group>
 
-            {/* Verse Snippet (Optional - keeps the card clean) */}
-            <Text size="sm" lineClamp={2} c="dimmed" fs="italic">
-                "{item.userRap || item.p1_verse || "..."}"
-            </Text>
-
-            <Button 
-                fullWidth 
-                variant="light" 
-                mt="sm" 
-                size="xs" 
-                rightSection={<IconPlayerPlay size={14}/>}
-                onClick={() => playAudio(item.id, item.aiVerse || item.p2_verse, item.opponent || "mc")}
-            >
-                Hear Verse
-            </Button>
+            <VerseDisplay 
+                p1Verse={item.userRap || item.p1_verse}
+                p2Verse={item.aiVerse || item.p2_verse}
+                p1Title="YOU"
+                p2Title={opponentName.toUpperCase()} 
+                onPlayAudio={() => playAudio(item.id, item.aiVerse || item.p2_verse, opponentName)}
+            />
         </Card>
     );
-}
+};
 
 export const OnboardingFlow = ({ name, setName, setFile, onSubmit, loading }) => {
     const [step, setStep] = React.useState(0);
