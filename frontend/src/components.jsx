@@ -101,7 +101,7 @@ export const OpponentSelector = ({ current, setOpponent }) => (
                             style={{ height: 'auto', padding: '12px 20px' }} // Auto height for stacking
                         >
                             <Text fw={900} size="sm" style={{ lineHeight: 1 }}>
-                                {bot.name.toUpperCase()}
+                                {(bot?.name || "Unknown Bot").toUpperCase()}
                             </Text>
                         </Button>
                             <Badge 
@@ -203,21 +203,20 @@ export const VerseDisplay = ({
 // In src/components.jsx
 
 export const HistoryItem = ({ item, playAudio, identity }) => {
-    // --- 1. DATA SANITIZATION ---
+    // --- 1. DATA SANITIZATION (The Fix) ---
     let opponentName = "Opponent";
 
     if (item.p2_name && item.p2_name !== "AI") {
-        // Case A: Multiplayer 
         opponentName = item.p2_name;
     } 
     else if (item.opponent && typeof item.opponent === 'object') {
-        // Case B: Full Object 
         opponentName = item.opponent.name || "Unknown";
     } 
     else if (typeof item.opponent === 'string') {
-        // Case C: Legacy Data (Just "RoboFlow")
         opponentName = item.opponent;
     }
+
+    const displayOpponent = opponentName.toUpperCase();
 
     // --- 2. LOGIC ---
     const isWin = item.result === 'win' || item.winner === identity?.mc_name || item.winnerCode === 'p1_win';
@@ -254,7 +253,7 @@ export const HistoryItem = ({ item, playAudio, identity }) => {
                 p1Verse={item.userRap || item.p1_verse}
                 p2Verse={item.aiVerse || item.p2_verse}
                 p1Title="YOU"
-                p2Title={opponentName.toUpperCase()} 
+                p2Title={displayOpponent} 
                 onPlayAudio={() => playAudio(item.id, item.aiVerse || item.p2_verse, opponentName)}
             />
         </Card>

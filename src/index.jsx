@@ -275,14 +275,28 @@ app.get('/profile/:userId', async (c) => {
 });
 
 app.post('/speak', async (c) => {
-    const { text } = await c.req.json();
+    const { text, character } = await c.req.json();
+
+    let selectedVoice = "luna";
+    if (character && OPPONENTS[character.toLowerCase()]) {
+        selectedVoice = OPPONENTS[character.toLowerCase()].voice;
+    } else if (character === "pvp") {
+        selectedVoice = "asteria"; 
+    }
+
     try {
-        const response = await c.env.AI.run('@cf/myshell-ai/melotts', { prompt: text, lang: 'en' });
-        const binaryString = atob(response.audio);
-        const bytes = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) bytes[i] = binaryString.charCodeAt(i);
-        return new Response(bytes.buffer, { headers: { 'Content-Type': 'audio/mpeg' } });
-    } catch(e) { return c.json({ error: 'TTS Failed' }, 500); }
+        const response = await c.env.AI.run('@cf/deepgram/aura-2-en', { 
+            text: text,
+            speaker: selectedVoice 
+        });
+        
+        return new Response(response, {
+            headers: { 'Content-Type': 'audio/mpeg' }
+        });
+    } catch(e) { 
+        console.error("TTS Error:", e);
+        return c.json({ error: 'TTS Failed' }, 500); 
+    }
 });
 
 // --- CHALLENGE HELPERS ---

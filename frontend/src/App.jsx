@@ -17,6 +17,14 @@ import { AppHeader, WordDisplay, OpponentSelector, BattleInputArea, HistoryItem,
 const CLERK_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 if (!CLERK_KEY) throw new Error("Missing Publishable Key");
 
+const getWsUrl = (path) => {
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const host = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
+        ? '127.0.0.1:8787' 
+        : window.location.host;
+    return `${protocol}//${host}${path}`;
+};
+
 // --- MAIN LOGIC ---
 function RapBattleApp() {
    	const { user, isLoaded } = useUser();
@@ -425,17 +433,21 @@ function RapBattleApp() {
         }
         setStatus('Playing Audio...');
         try {
-            const res = await fetch('/speak', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text, character }),
-            });
-            const blob = await res.blob();
-            const url = URL.createObjectURL(blob);
-            audioCache.current[battleId] = url;
-            new Audio(url).play();
-            setStatus('Ready');
-        } catch (e) { console.error(e); setStatus('Audio Failed'); }
-    };
+        const res = await fetch('/speak', {
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                text, 
+                character: character?.toLowerCase()
+            }),
+        });
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        audioCache.current[battleId] = url;
+        new Audio(url).play();
+        setStatus('Ready');
+    } catch (e) { console.error(e); setStatus('Audio Failed'); }
+};
 
     const toggleMic = async () => { isRecording ? stopRecording() : startRecording(); };
 
@@ -487,7 +499,13 @@ function RapBattleApp() {
 
     const startMultiplayer = () => {
         const roomID = Math.random().toString(36).substring(2, 7);
-        connectToBattleRoom(roomID, 'CREATE');
+		const currentSettings = {
+			rounds: rounds,
+			turnTime: timeLeft,
+			battleMode: battleMode,
+			mandatoryWord: wordMode ? targetWord : null
+		};
+        connectToBattleRoom(roomID, 'CREATE', currentSettings);
     };
   
     const joinMultiplayer = () => {
@@ -500,7 +518,7 @@ function RapBattleApp() {
 		setStatus("Searching for opponent...");
 
 		// Connect to Matchmaker
-		const queueWs = new WebSocket('ws://127.0.0.1:8787/ws/queue');
+		const queueWs = new WebSocket(getWsUrl('/ws/queue'));
 
 		queueWs.onmessage = (event) => {
 			const data = JSON.parse(event.data);
@@ -524,10 +542,10 @@ function RapBattleApp() {
 		setStatus('Ready');
 	}
 
-    const connectToBattleRoom = (roomID, role, settings=IconNumber4Small) => {
+    const connectToBattleRoom = (roomID, role, settings={}) => {
         if (ws.current) ws.current.close();
         setStatus('Connecting...');
-        const socket = new WebSocket(`ws://127.0.0.1:8787/ws/battle/${roomID}`);
+        const socket = new WebSocket(getWsUrl(`/ws/battle/${roomID}`));
         ws.current = socket;
 
         socket.onopen = async () => {
@@ -1021,7 +1039,7 @@ function RapBattleApp() {
                                             
                                             <Divider my="md" />
 
-                                            {/* SECTION 2: VERSES (ALWAYS VISIBLE IMMEDIATELY) */}
+                                            {/* SECTION 2: VERSES*/}
                                             <VerseDisplay
                                                 p1Verse={lastBattle.userRap}
                                                 p2Verse={lastBattle.aiVerse}

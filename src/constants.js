@@ -11,6 +11,7 @@ export const getRandomWord = () => {
 export const OPPONENTS = {
     'roboflow': { 
         name: 'RoboFlow', 
+        voice: 'orion',
         color: 'blue', 
         points: 10,
         difficultyModifier: 0,
@@ -26,6 +27,7 @@ export const OPPONENTS = {
     },
     'bytebeater': { 
         name: 'ByteBeater', 
+        voice: 'aura',
         color: 'red', 
         difficultyModifier: 5,
         level: 'Medium',
@@ -41,6 +43,7 @@ export const OPPONENTS = {
     'ai-ce': { 
         name: 'AI-CE', 
         color: 'purple', 
+        voice: 'luna',
         difficultyModifier: 5,
         level: 'Hard',
         points: 50,
@@ -58,6 +61,9 @@ export const OPPONENTS = {
         FORMATTING:
         - EACH LINE MUST END IN A COMMA OR PERIOD to indicate breath control and flow.` 
     },
+    'pvp-default': {
+        voice: 'Odysseus'
+    }
 };
 
 export const JUDGING_ERROR_MESSAGES = [

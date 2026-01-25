@@ -404,36 +404,37 @@ export class Challenge {
         else if (this.p2 && this.p2.username === winnerUsername) winnerId = this.p2.userId;
 
         try {
-            const hasWordBonus = !!this.mandatoryWord;
-            const id = this.env.USER_PROFILE.idFromName(winnerUsername);
+            // Calculate PvP Points (Base 30 + their actual rap score)
+            const winnerScore = this.p1.username === winnerUsername 
+                ? resultData.scores.p1.total 
+                : resultData.scores.p2.total
+            
+            const totalPvPPoints = 30 + (winnerScore || 0);
+
+            const id = this.env.USER_PROFILE.idFromName(winnerId);
             const userStub = this.env.USER_PROFILE.get(id);
 
-            const userRes = await userStub.fetch('http://do/update', {
+            await userStub.fetch('http://do/update', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     result: 'win',
                     type: 'pvp',
-                    hasWordBonus: hasWordBonus
+                    pointsValue: totalPvPPoints
                 })
             });
-            // 2. Update Leaderboard
-            const pointsEarned = 20 + (hasWordBonus ? 10 : 0);
 
+            // Update Global PvP Leaderboard
             const lbId = this.env.LEADERBOARD.idFromName('GLOBAL_PVP');
-            const lbStub = this.env.LEADERBOARD.get(lbId);
-            await lbStub.fetch('http://do/submit', {
+            await this.env.LEADERBOARD.get(lbId).fetch('http://do/submit', {
                 method: 'POST',
                 body: JSON.stringify({ 
                     username: winnerUsername, 
                     userId: winnerId,
-                    score: pointsEarned 
+                    score: totalPvPPoints 
                 })
             });
-            
-        } catch (e) {
-            console.error("Leaderboard update failed", e);
-        }
+        } catch (e) { console.error("PvP Update Failed", e); }
     }
 
     async saveBattleToDB(result) {
