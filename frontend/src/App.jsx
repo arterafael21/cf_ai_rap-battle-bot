@@ -5,7 +5,7 @@ import {
 } from '@mantine/core';
 import { 
     IconMicrophone, IconMicrophoneOff, IconTrophy, IconSwords, IconUsers, IconSearch, IconArrowLeft, IconShare, IconKeyboard, IconMusic, IconUserCircle, IconEdit, IconSend, IconPlayerPlay,
-	IconNumber4Small, IconRefresh
+    IconNumber4Small, IconRefresh
 } from '@tabler/icons-react';
 import '@mantine/core/styles.css';
 import { ClerkProvider, SignedIn, SignedOut, useUser, useAuth, useClerk, SignInButton } from "@clerk/clerk-react";
@@ -35,11 +35,15 @@ const getWsUrl = (path) => {
 
 // --- MAIN LOGIC ---
 function RapBattleApp() {
-   	const { user, isLoaded } = useUser();
-	const { getToken } = useAuth();
+    const { user: clerkUser, isLoaded } = useUser();
+    const { getToken } = useAuth();
     const { signOut } = useClerk();
+    
+    // GUEST STATE
     const [guestUser, setGuestUser] = useState(null);
-    const activeUser = clerkUser || guestUser
+    
+    // UNIFIED USER
+    const activeUser = clerkUser || guestUser;
 
     // STATE
     const [identity, setIdentity] = useState(null);
@@ -71,30 +75,30 @@ function RapBattleApp() {
     const [isQueuing, setIsQueuing] = useState(false);
     const [isOpponentTyping, setIsOpponentTyping] = useState(false);
     const typingTimeoutRef = useRef(null);
-	const [turnCount, setTurnCount] = useState(0);
-	
+    const [turnCount, setTurnCount] = useState(0);
+    
 
-	// SPECTATING
+    // SPECTATING
     const [isSpectator, setIsSpectator] = useState(false);
-	const [showVoting, setShowVoting] = useState(false);
-	const [hasVoted, setHasVoted] = useState(false);
-	const [voteTimer, setVoteTimer] = useState(0);
+    const [showVoting, setShowVoting] = useState(false);
+    const [hasVoted, setHasVoted] = useState(false);
+    const [voteTimer, setVoteTimer] = useState(0);
 
     // ARENA STATE
     const [isMyTurn, setIsMyTurn] = useState(false);
     const [battleLog, setBattleLog] = useState([]);
     const [timeLeft, setTimeLeft] = useState(30); 
-	const hasAutoSubmitted = useRef(false);
-	const [rounds, setRounds] = useState(1);
-	const matchStartTimer = useRef(null);
-	const chatEndRef = useRef(null);
+    const hasAutoSubmitted = useRef(false);
+    const [rounds, setRounds] = useState(1);
+    const matchStartTimer = useRef(null);
+    const chatEndRef = useRef(null);
     
     // WORD CHALLENGE STATE
     const [targetWord, setTargetWord] = useState(''); 
     const [wordMode, setWordMode] = useState(false);
 
     const ws = useRef(null);
-	const [isPlaying, setIsPlaying] = useState(false);
+    const [isPlaying, setIsPlaying] = useState(false);
     const [recordedBlob, setRecordedBlob] = useState(null);
     const [timer, setTimer] = useState(30);
     const timerRef = useRef(null);
@@ -102,88 +106,109 @@ function RapBattleApp() {
     const mediaRecorder = useRef(null);
     const audioChunks = useRef([]);
     const [activeAudioId, setActiveAudioId] = useState(null);
-	
+    
     // INITIALIZATION
-	useEffect(() => {
-		chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-	}, [battleLog]);
-
-	useEffect(() => {
-		if (mode === 'result' && duelResult) {
-			// determine winner
-			const amIP1 = duelResult.p1_name === (identity?.mc_name || user?.firstName);
-			const myWin = (amIP1 && duelResult.winnerCode === 'p1_win') || (!amIP1 && duelResult.winnerCode === 'p2_win');
-
-			if (duelResult.winner === (identity?.mc_name || user?.firstName)) {
-				confetti({
-					particleCount: 150,
-					spread: 70,
-					origin: { y: 0.6 }
-				});
-			}
-		}
-	}, [mode, duelResult]);
-
-	useEffect(() => {
-		if (mode === 'create_success' && ws.current && ws.current.readyState === WebSocket.OPEN) {
-			ws.current.send(JSON.stringify({
-				type: 'UPDATE_SETTINGS',
-				rounds: parseInt(rounds),
-				turnTime: parseInt(timeLeft),
-				battleMode: battleMode,
-				mandatoryWord: wordMode ? targetWord : null
-			}));
-		}
-	}, [rounds, battleMode, mode, targetWord, timeLeft])
     useEffect(() => {
-        if (user) {
-            fetchStats(user.id);
+        chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [battleLog]);
+
+    useEffect(() => {
+        if (mode === 'result' && duelResult) {
+            // determine winner
+            // FIX: Changed 'user' to 'activeUser'
+            const amIP1 = duelResult.p1_name === (identity?.mc_name || activeUser?.firstName);
+            const myWin = (amIP1 && duelResult.winnerCode === 'p1_win') || (!amIP1 && duelResult.winnerCode === 'p2_win');
+
+            if (duelResult.winner === (identity?.mc_name || activeUser?.firstName)) {
+                confetti({
+                    particleCount: 150,
+                    spread: 70,
+                    origin: { y: 0.6 }
+                });
+            }
+        }
+    }, [mode, duelResult]);
+
+    useEffect(() => {
+        if (mode === 'create_success' && ws.current && ws.current.readyState === WebSocket.OPEN) {
+            ws.current.send(JSON.stringify({
+                type: 'UPDATE_SETTINGS',
+                rounds: parseInt(rounds),
+                turnTime: parseInt(timeLeft),
+                battleMode: battleMode,
+                mandatoryWord: wordMode ? targetWord : null
+            }));
+        }
+    }, [rounds, battleMode, mode, targetWord, timeLeft])
+
+    useEffect(() => {
+        if (activeUser) {
+            // don't fetch stats for guest
+            if (activeUser.isGuest) {
+                setStats({ wins: 0, losses: 0, score: 0, rank: 'Guest' });
+                setIdentity({ mc_name: activeUser.firstName, roast_context: "A mysterious guest." });
+            } else {
+                fetchStats(activeUser.id)
+            }
             loadHistory();
         } else {
-			setMode('menu');
-		}
+            setMode('menu');
+        }
         fetchLeaderboard();
         refreshWord();
-    }, [user]);
+    }, [activeUser]);
 
-	// TURN TIMER
-	useEffect(() => {
-		if (isMyTurn) {
-			hasAutoSubmitted.current = false;
-			setTimeLeft(30);
-		}
-	}, [isMyTurn]);
+    const authenticatedFetch = async (url, options={}) => {
+        const headers = options.headers || {};
 
-	useEffect(() => {
-		let interval = null;
-		
-		if (mode === 'arena' && isMyTurn) {
-			interval = setInterval(() => {
-				setTimeLeft((prev) => {
-					if (prev <= 1) {
-						clearInterval(interval);
-						// Only auto-submit if we haven't already for THIS SPECIFIC turn
-						if (!hasAutoSubmitted.current) {
-							hasAutoSubmitted.current = true;
-							submitTurn("(CHOKED: Time Ran Out)");
-						}
-						return 0;
-					}
-					return prev - 1;
-				});
-			}, 1000);
-		}
+        if (activeUser?.isGuest) {
+            headers['x-guest-id'] = activeUser.id;
+        } else {
+            const token = await getToken();
+            headers['Authorization'] = `Bearer ${token}`;
+        }
 
-		return () => clearInterval(interval);
-	}, [isMyTurn, turnCount, mode]);
+        return fetch(url, { ...options, headers });
+    }
 
-	const handleManualPlay = (log) => {
-		if (log.audio) {
-			new Audio(log.audio).play();
-		} else {
-			loadAndPlayAudio(`msg-${Date.now()}`, log.text, 'bytebeater');
-		}
-	};
+    // TURN TIMER
+    useEffect(() => {
+        if (isMyTurn) {
+            hasAutoSubmitted.current = false;
+            setTimeLeft(30);
+        }
+    }, [isMyTurn]);
+
+    useEffect(() => {
+        let interval = null;
+        
+        if (mode === 'arena' && isMyTurn) {
+            interval = setInterval(() => {
+                setTimeLeft((prev) => {
+                    if (prev <= 1) {
+                        clearInterval(interval);
+                        // Only auto-submit if we haven't already for THIS SPECIFIC turn
+                        if (!hasAutoSubmitted.current) {
+                            hasAutoSubmitted.current = true;
+                            submitTurn("(CHOKED: Time Ran Out)");
+                        }
+                        return 0;
+                    }
+                    return prev - 1;
+                });
+            }, 1000);
+        }
+
+        return () => clearInterval(interval);
+    }, [isMyTurn, turnCount, mode]);
+
+    const handleManualPlay = (log) => {
+        if (log.audio) {
+            new Audio(log.audio).play();
+        } else {
+            loadAndPlayAudio(`msg-${Date.now()}`, log.text, 'bytebeater');
+        }
+    };
 
     const refreshWord = () => setTargetWord(getRandomWord());
 
@@ -193,111 +218,129 @@ function RapBattleApp() {
         if (replayId) loadReplay(replayId);
     }, []);
 
+    // FIX: Renamed from handleGuestLogIn to handleGuestLogin (lowercase 'i')
+    const handleGuestLogin = () => {
+        const randomId = `guest_${Math.random().toString(36).substr(2, 9)}`;
+        const randomName = `MC Guest ${Math.floor(Math.random() * 1000)}`;
+
+        setGuestUser({
+            id: randomId,
+            firstName: randomName,
+            isGuest: true
+        })
+    }
+
+    const handleLogout = () => {
+        if (guestUser) setGuestUser(null);
+        else signOut();
+    }
+
     // API CALLS
     const fetchStats = async (userId) => {
         try {
             const res = await fetch(`/profile/${userId}`);
             const data = await res.json();
             if (data.data) setStats(data.data);
-			if (!data.identity || !data.identity.mc_name) {
-				setShowOnboarding(true);
-			}
+            if (!data.identity || !data.identity.mc_name) {
+                setShowOnboarding(true);
+            }
             if (data.identity) {
                 setIdentity(data.identity);
             }
         } catch (e) { console.error(e); }
-    };
+    }
+    
 
     const handleOnboardingSubmit = async () => {
-        if (!user || !onboardingName) return alert("Please enter a name");
+        // FIX: Changed 'user' to 'activeUser'
+        if (!activeUser || !onboardingName) return alert("Please enter a name");
         setUploading(true);
-        const token = await getToken();
 
-		try {
-			const res = await fetch('/onboarding/update', {
-				method: 'POST',
-				headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' }, 
-				body: JSON.stringify({ mcName: onboardingName })
-			});
-			
-			if (!res.ok) {
-				const data = await res.json();
-				throw new Error(data.error || 'Failed to update name');
-			}
+        try {
+            const res = await authenticatedFetch('/onboarding/update', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mcName: onboardingName })
+            });
+            
+            if (!res.ok) {
+                const data = await res.json();
+                throw new Error(data.error || 'Failed to update name');
+            }
 
-			if (onboardingFile) {
-				const formData = new FormData();
-				formData.append('image', onboardingFile);
-				await fetch('/onboarding/upload', {
-					method: 'POST', headers: { 'Authorization': `Bearer ${token}`}, body: formData
-            	});
-        	}
+            if (onboardingFile) {
+                const formData = new FormData();
+                formData.append('image', onboardingFile);
+                await authenticatedFetch('/onboarding/upload', {
+                    method: 'POST', body: formData
+                });
+            }
 
-			await fetch('/onboarding/update', {
-				method: 'POST',
-				headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-				body: JSON.stringify({ mcName: onboardingName }) 
-			});
+            await authenticatedFetch('/onboarding/update', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mcName: onboardingName }) 
+            });
 
-			setShowOnboarding(false);
-			fetchStats(user.id);
-		} catch (e) {
-			alert(e.message);
-		} finally {
-			setUploading(false);
-		}
+            setShowOnboarding(false);
+            // FIX: Changed 'user' to 'activeUser'
+            fetchStats(activeUser.id);
+        } catch (e) {
+            alert(e.message);
+        } finally {
+            setUploading(false);
+        }
     }
 
-	const updateProfileLogic = async (newName, newFile) => {
-		setUploading(true);
-		const token = await getToken();
+    const updateProfileLogic = async (newName, newFile) => {
+        setUploading(true);
 
-		try {
-			// 1. Update Name (if changed)
-			if (newName) {
-				const res = await fetch('/onboarding/update', {
-					method: 'POST',
-					headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
-					body: JSON.stringify({ mcName: newName })
-				});
-				if (!res.ok) {
-					const data = await res.json();
-					throw new Error(data.error); 
-				}
-				// Update local state immediately
-				setIdentity(prev => ({ ...prev, mc_name: newName }));
-			}
+        try {
+            // 1. Update Name (if changed)
+            if (newName) {
+                const res = await authenticatedFetch('/onboarding/update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ mcName: newName })
+                });
+                if (!res.ok) {
+                    const data = await res.json();
+                    throw new Error(data.error); 
+                }
+                // Update local state immediately
+                setIdentity(prev => ({ ...prev, mc_name: newName }));
+            }
 
-			// 2. Upload Image (and get new AI description)
-			if (newFile) {
-				const formData = new FormData();
-				formData.append('image', newFile);
-				
-				const res = await fetch('/onboarding/upload', {
-					method: 'POST',
-					headers: { 'Authorization': `Bearer ${token}`},
-					body: formData
-				});
+            // 2. Upload Image (and get new AI description)
+            if (newFile) {
+                const formData = new FormData();
+                formData.append('image', newFile);
+                
+                const res = await authenticatedFetch('/onboarding/upload', {
+                    method: 'POST',
+                    body: formData
+                });
 
-				const data = await res.json();
-				if (data.description) {
-					setIdentity(prev => ({ ...prev, roast_context: data.description }));
-				}
+                const data = await res.json();
+                if (data.description) {
+                    setIdentity(prev => ({ ...prev, roast_context: data.description }));
+                }
 
-				setAvatarTs(Date.now())
-			}
+                setAvatarTs(Date.now())
+            }
 
-			// 3. Background refresh (just in case)
-			fetchStats(user.id);
-			alert("Profile Updated!");
+            // 3. Background refresh (just in case)
+            // FIX: Changed 'user' to 'activeUser'
+            if (!activeUser.isGuest) fetchStats(activeUser.id);
+            alert("Profile Updated!");
 
-		} catch (e) {
-			alert("Update failed: " + e.message);
-			throw e; 
-		} finally {
-			setUploading(false);
-		}
-	}
+        } catch (e) {
+            alert("Update failed: " + e.message);
+            throw e; 
+        } finally {
+            setUploading(false);
+        }
+    }
 
     const fetchLeaderboard = async (type='single') => {
         try {
@@ -318,10 +361,14 @@ function RapBattleApp() {
     };
 
     const saveHistory = (newItem) => {
+        // Guests can save locally, but we don't fetch stats for them
+        if (activeUser?.isGuest) return;
+
         const updated = [newItem, ...history].slice(0, 20);
         setHistory(updated);
         localStorage.setItem('battle_history', JSON.stringify(updated));
-        if (user) fetchStats(user.id);
+        // FIX: Changed 'user' to 'activeUser'
+        if (activeUser) fetchStats(activeUser.id);
     };
 
     const clearHistory = () => {
@@ -357,21 +404,22 @@ function RapBattleApp() {
         const idToShare = duelResult?.battle_id || lastBattle?.battleId || new URLSearchParams(window.location.search).get('replay');
 
 
-		if (!idToShare) return alert("No battle ID found to share");
+        if (!idToShare) return alert("No battle ID found to share");
 
 
-		const link = `${origin}/?replay=${idToShare}`;
+        const link = `${origin}/?replay=${idToShare}`;
 
-		navigator.clipboard.writeText(link).then(() => {
-			alert('Battle Link Copied! Share it with friends');
-		}).catch(err => {
-			prompt(err);
-		})
+        navigator.clipboard.writeText(link).then(() => {
+            alert('Battle Link Copied! Share it with friends');
+        }).catch(err => {
+            prompt(err);
+        })
     };
 
     // SINGLE PLAYER BATTLE
     const handleBattle = async () => {
-        if (!user) return alert("Please sign in!");
+        // FIX: Changed 'user' to 'activeUser'
+        if (!activeUser) return alert("Please sign in!");
         if (!input) return alert('Freestyle something!');
 
         setLastBattle(null); 
@@ -385,11 +433,10 @@ function RapBattleApp() {
         setStatus('Sending Verse...');
 
         try {
-            const token = await getToken(); 
-            const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
+            const headers = { 'Content-Type': 'application/json' };
             
             // 1. GENERATE VERSE
-            const genRes = await fetch('/battle/generate', {
+            const genRes = await authenticatedFetch('/battle/generate', {
                 method: 'POST',
                 headers,
                 body: JSON.stringify({ userRap: input, opponent }),
@@ -412,7 +459,7 @@ function RapBattleApp() {
 
             // 3. JUDGE (Happens while audio is fetching)
             setStatus('Judging Rap...');
-            const judgeRes = await fetch('/battle/judge', {
+            const judgeRes = await authenticatedFetch('/battle/judge', {
                 method: 'POST',
                 headers,
                 body: JSON.stringify({ 
@@ -473,7 +520,11 @@ function RapBattleApp() {
                 setActiveAudioId(battleId);
                 audio.onended = () => { setActiveAudioId(null); currentAudioRef.current = null; };
                 audio.onerror = () => { setActiveAudioId(null); currentAudioRef.current = null; };
-                audio.play().catch(() => setActiveAudioId(null));
+                
+                audio.play().catch((e) => {
+                    // console.warn("Audio Play Blocked:", e);
+                    setActiveAudioId(null);
+                });
             } else {
                 setActiveAudioId(null);
             }
@@ -523,7 +574,7 @@ function RapBattleApp() {
                 audio.onpause = cleanup;
 
                 await audio.play().catch((e) => {
-                    console.error("Playback block:", e);
+                    // console.error("Playback block:", e);
                     cleanup();
                 });
             }
@@ -543,9 +594,9 @@ function RapBattleApp() {
             audioChunks.current = [];
             mediaRecorder.current.ondataavailable = (e) => audioChunks.current.push(e.data);
             mediaRecorder.current.onstop = () => {
-				const blob = new Blob(audioChunks.current, { type: 'audio/webm' });
-				setRecordedBlob(blob);
-			};
+                const blob = new Blob(audioChunks.current, { type: 'audio/webm' });
+                setRecordedBlob(blob);
+            };
             mediaRecorder.current.start();
             setIsRecording(true);
         } catch (err) { alert('Microphone error: ' + err.message); }
@@ -557,11 +608,11 @@ function RapBattleApp() {
             setIsRecording(false);
         }
 
-		const stream = mediaRecorder.current.stream;
-		if (stream) {
-			const tracks = stream.getTracks();
-			tracks.forEach(track => track.stop());
-		}
+        const stream = mediaRecorder.current.stream;
+        if (stream) {
+            const tracks = stream.getTracks();
+            tracks.forEach(track => track.stop());
+        }
     };
 
     const handleTranscription = async () => {
@@ -584,12 +635,12 @@ function RapBattleApp() {
 
     const startMultiplayer = () => {
         const roomID = Math.random().toString(36).substring(2, 7);
-		const currentSettings = {
-			rounds: rounds,
-			turnTime: timeLeft,
-			battleMode: battleMode,
-			mandatoryWord: wordMode ? targetWord : null
-		};
+        const currentSettings = {
+            rounds: rounds,
+            turnTime: timeLeft,
+            battleMode: battleMode,
+            mandatoryWord: wordMode ? targetWord : null
+        };
         connectToBattleRoom(roomID, 'CREATE', currentSettings);
     };
   
@@ -598,16 +649,16 @@ function RapBattleApp() {
         connectToBattleRoom(battleCode, 'JOIN');
     };
 
-	const joinQueue = () => {
+    const joinQueue = () => {
         const audioStarter = new Audio();
         audioStarter.play().catch(() => {}); 
-		setIsQueuing(true);
-		setStatus("Searching for opponent...");
+        setIsQueuing(true);
+        setStatus("Searching for opponent...");
 
-		// Connect to Matchmaker
+        // Connect to Matchmaker
         const wsUrl = getWsUrl('/ws/queue');
 
-        alert("Phone connecting to:\n" + wsUrl);
+        // alert("Phone connecting to:\n" + wsUrl);
 
         const queueWs = new WebSocket(wsUrl);
 
@@ -621,31 +672,28 @@ function RapBattleApp() {
 
         queueWs.onerror = (err) => {
             console.error("[Queue] Connection Error:", err);
-            alert("Mobile Connection Error. Check if your browser blocks WebSockets.");
-            setIsQueuing(false);
         };
 
-		queueWs.onmessage = (event) => {
-			const data = JSON.parse(event.data);
-			if (data.type === "MATCH_FOUND") {
-				setIsQueuing(false);
-				setStatus('Match Found! Connecting...');
-				setBattleCode(data.battleId);
+        queueWs.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            if (data.type === "MATCH_FOUND") {
+                setIsQueuing(false);
+                setStatus('Match Found! Connecting...');
+                setBattleCode(data.battleId);
 
-				// Automatically start the game with the assigned role
-				connectToBattleRoom(data.battleId, data.role, data.config);
-			}
-		};
+                // Automatically start the game with the assigned role
+                connectToBattleRoom(data.battleId, data.role, data.config);
+            }
+        };
 
-		queueWs.onclose = () => setIsQueuing(false);
-		ws.current = queueWs;
-	}
+        ws.current = queueWs;
+    }
 
-	const cancelQueue = () => {
-		if (ws.current) ws.current.close();
-		setIsQueuing(false);
-		setStatus('Ready');
-	}
+    const cancelQueue = () => {
+        if (ws.current) ws.current.close();
+        setIsQueuing(false);
+        setStatus('Ready');
+    }
 
     const connectToBattleRoom = (roomID, role, settings={}) => {
         if (ws.current) ws.current.close();
@@ -654,13 +702,13 @@ function RapBattleApp() {
         ws.current = socket;
 
         socket.onopen = async () => {
-            const myName = identity?.mc_name || user?.firstName || 'Guest';
+            const myName = identity?.mc_name || activeUser?.firstName || 'Guest';
             socket.send(JSON.stringify({ 
                 type: 'INIT', 
-				username: myName, 
-				userId: user.id, 
-				role: role,
-				settings: settings
+                username: myName, 
+                userId: activeUser.id, 
+                role: role,
+                settings: settings
             }));
 
             if (role === 'CREATE') {
@@ -674,13 +722,13 @@ function RapBattleApp() {
         socket.onmessage = (event) => {
             const msg = JSON.parse(event.data);
 
-			if (msg.type === 'ERROR') {
-				alert(msg.message);
-				setMode('menu');
-				ws.current.close();
-				setIsLoading(false);
-				return;
-			}
+            if (msg.type === 'ERROR') {
+                alert(msg.message);
+                setMode('menu');
+                ws.current.close();
+                setIsLoading(false);
+                return;
+            }
 
             if (msg.type === 'OPPONENT_JOINED') {
                 setP1Data({ name: msg.username, id: msg.userId });
@@ -689,27 +737,28 @@ function RapBattleApp() {
             // --- START GAME ---
             if (msg.type === 'MATCH_START') {
                 setIsMyTurn(msg.yourTurn);
-				const amIP1 = msg.p1Info.id === user.id;
-				const opponentInfo = amIP1 ? msg.p2Info : msg.p1Info;
-				setP1Data({ name: opponentInfo.username, id: opponentInfo.id });
+                // FIX: Changed 'user' to 'activeUser'
+                const amIP1 = msg.p1Info.id === activeUser.id;
+                const opponentInfo = amIP1 ? msg.p2Info : msg.p1Info;
+                setP1Data({ name: opponentInfo.username, id: opponentInfo.id });
 
-				if (msg.battleMode) setBattleMode(msg.battleMode);
+                if (msg.battleMode) setBattleMode(msg.battleMode);
                 if (msg.rounds) setRounds(msg.rounds);
-				if (msg.turnTime) setTimeLeft(msg.turnTime);
+                if (msg.turnTime) setTimeLeft(msg.turnTime);
                 if (msg.mandatoryWord) { setTargetWord(msg.mandatoryWord); setWordMode(true); }
 
-				if (msg.isSpectator) {
-					setIsSpectator(true);
-					setStatus('Spectating Battle');
-				} else {
-					setIsSpectator(false);
-				}
+                if (msg.isSpectator) {
+                    setIsSpectator(true);
+                    setStatus('Spectating Battle');
+                } else {
+                    setIsSpectator(false);
+                }
 
-				setMode('pre_battle');
+                setMode('pre_battle');
 
-				if (matchStartTimer.current) clearTimeout(matchStartTimer.current);
+                if (matchStartTimer.current) clearTimeout(matchStartTimer.current);
                 
-				matchStartTimer.current = setTimeout(() => {
+                matchStartTimer.current = setTimeout(() => {
                     setIsMyTurn(msg.yourTurn);
                     setBattleLog([]);
                     // Ensure we use the turnTime from config, not just hardcoded 30
@@ -718,20 +767,20 @@ function RapBattleApp() {
                 }, 5000);
             }
 
-			// --- VOTING PHASE ---
-			if (msg.type === 'START_VOTING') {
-				setMode('judging...');
-				setShowVoting(true);
-				setVoteTimer(msg.duration || 30);
+            // --- VOTING PHASE ---
+            if (msg.type === 'START_VOTING') {
+                setMode('judging...');
+                setShowVoting(true);
+                setVoteTimer(msg.duration || 30);
 
-				// Visual Countdown for voting
+                // Visual Countdown for voting
                 const interval = setInterval(() => {
                     setVoteTimer(prev => {
                         if (prev <= 1) { clearInterval(interval); return 0; }
                         return prev - 1;
                     });
                 }, 1000);
-			}
+            }
 
             // --- RECEIVE TURN ---
             if (msg.type === 'NEW_VERSE') {
@@ -747,25 +796,25 @@ function RapBattleApp() {
                 
                 loadAndPlayAudio(msgId, msg.verse, 'pvp', true);
 
-				const currentVerses = battleLog.length + 1;
-				const maxVerses = rounds * 2;
+                const currentVerses = battleLog.length + 1;
+                const maxVerses = rounds * 2;
 
-				if (currentVerses < maxVerses) {
-					setIsMyTurn(true);
-					setTimeLeft(30);
-					setTurnCount(prev => prev + 1);
-					hasAutoSubmitted.current = false;
-				} else {
-					setIsMyTurn(false);
-					setStatus('Battle Finished. Judges are looking...')
-				}
+                if (currentVerses < maxVerses) {
+                    setIsMyTurn(true);
+                    setTimeLeft(30);
+                    setTurnCount(prev => prev + 1);
+                    hasAutoSubmitted.current = false;
+                } else {
+                    setIsMyTurn(false);
+                    setStatus('Battle Finished. Judges are looking...')
+                }
             }
 
-			if (msg.type === 'JUDGING') {
-				setMode('judging...');
-				setStatus("Judging in progress...");
-				setIsMyTurn(false);
-			}
+            if (msg.type === 'JUDGING') {
+                setMode('judging...');
+                setStatus("Judging in progress...");
+                setIsMyTurn(false);
+            }
 
             if (msg.type === 'OPPONENT_TYPING') {
                 setIsOpponentTyping(true);
@@ -774,10 +823,10 @@ function RapBattleApp() {
             }
 
             if (msg.type === 'OPPONENT_DISCONNECTED') {
-				if (matchStartTimer.current) clearTimeout(matchStartTimer.current);
-				alert("Opponent forfeited! You win by default");
+                if (matchStartTimer.current) clearTimeout(matchStartTimer.current);
+                alert("Opponent forfeited! You win by default");
 
-				setDuelResult({
+                setDuelResult({
                     winner: "You (Default)",
                     p1_verse: "Opponent fled the battle.",
                     p2_verse: "VICTORY BY FORFEIT",
@@ -789,54 +838,55 @@ function RapBattleApp() {
                 });
 
                 setMode('result');
-				ws.current.close();
+                ws.current.close();
             }
 
             if (msg.type === 'RESULT') {
                 setDuelResult(msg.result);
                 setMode('result');
-				setShowVoting(false);
-				
-				if (user) {
-					fetchStats(user.id);
-				}
+                setShowVoting(false);
+                
+                // FIX: Changed 'user' to 'activeUser'
+                if (activeUser && !activeUser.isGuest) {
+                    fetchStats(activeUser.id);
+                }
 
-				saveHistory({
-					...msg.result,
-					timestamp: Date.now(),
-					myPoints: msg.result.pointsEarned
-				})
+                saveHistory({
+                    ...msg.result,
+                    timestamp: Date.now(),
+                    myPoints: msg.result.pointsEarned
+                })
                 ws.current.close();
             }
         };
     };
 
-	// SEND FUNCTION
-	const submitTurn = async (forcedText=null) => {
-		const textToSend = forcedText || input;
-		if (!textToSend && !recordedBlob) return;
-		
-		// 1. Local Update
-		setBattleLog(prev => [...prev, { sender: 'me', text: textToSend, audio: recordedBlob }]);
+    // SEND FUNCTION
+    const submitTurn = async (forcedText=null) => {
+        const textToSend = forcedText || input;
+        if (!textToSend && !recordedBlob) return;
+        
+        // 1. Local Update
+        setBattleLog(prev => [...prev, { sender: 'me', text: textToSend, audio: recordedBlob }]);
 
-		// 2. Prepare Data
-		let audioData = null;
-		if (battleMode === 'audio' && recordedBlob) {
-			audioData = await blobToBase64(recordedBlob);
-		}
+        // 2. Prepare Data
+        let audioData = null;
+        if (battleMode === 'audio' && recordedBlob) {
+            audioData = await blobToBase64(recordedBlob);
+        }
 
-		// 3. Send
-		ws.current.send(JSON.stringify({
-			type: 'SUBMIT_TURN',
-			verse: textToSend,
-			audioData: audioData
-		}));
-		
-		// 4. Reset
-		setInput('');
-		setIsMyTurn(false);
-		setRecordedBlob(null);
-	}
+        // 3. Send
+        ws.current.send(JSON.stringify({
+            type: 'SUBMIT_TURN',
+            verse: textToSend,
+            audioData: audioData
+        }));
+        
+        // 4. Reset
+        setInput('');
+        setIsMyTurn(false);
+        setRecordedBlob(null);
+    }
     
 
     const startTimer = () => {
@@ -862,29 +912,26 @@ function RapBattleApp() {
         }
     };
 
-	const handleInput = (e) => {
-		const val = e.currentTarget.value;
-		setInput(val);
+    const handleInput = (e) => {
+        const val = e.currentTarget.value;
+        setInput(val);
 
-		if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-			ws.current.send(JSON.stringify({ type: 'TYPING' }));
-		}
-	}
+        if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+            ws.current.send(JSON.stringify({ type: 'TYPING' }));
+        }
+    }
 
-	const retryJudging = async () => {
+    const retryJudging = async () => {
         if (!lastBattle) return;
         
         setIsLoading(true);
         setStatus('Retrying Judge...');
         
         try {
-            const token = await getToken();
-            const headers = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` };
-
             // Re-send the EXACT same verses to the judge endpoint
-            const judgeRes = await fetch('/battle/judge', {
+            const judgeRes = await authenticatedFetch('/battle/judge', {
                 method: 'POST',
-                headers,
+                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
                     userRap: lastBattle.userRap, 
                     aiVerse: lastBattle.aiVerse, 
@@ -912,21 +959,22 @@ function RapBattleApp() {
         }
     };
 
-	if (showOnboarding) {
-		return (
-			<OnboardingFlow
-			name={onboardingName}
-			setName={setOnboardingName}
-			setFile={setOnboardingFile}
-			onSubmit={handleOnboardingSubmit}
-			loading={uploading}
-			/>
-		)
-	}
+    if (showOnboarding) {
+        return (
+            <OnboardingFlow
+            name={onboardingName}
+            setName={setOnboardingName}
+            setFile={setOnboardingFile}
+            onSubmit={handleOnboardingSubmit}
+            loading={uploading}
+            />
+        )
+    }
 
     return (
         <>
             {/* --- 1. SIGNED OUT VIEW --- */}
+            {!activeUser && (
             <SignedOut>
                 {duelResult?.scores?.comment && (
                     <Text c="dimmed" mt="md" ta="center" fs="italic">"{duelResult.scores.comment}"</Text>
@@ -966,22 +1014,23 @@ function RapBattleApp() {
                         </Stack>
                     </Container>
                 ) : (
-                    <SplashPage />
+                    <SplashPage onGuestLogin={handleGuestLogin} />
                 )}
             </SignedOut>
+            )}
 
-            {/* --- 2. SIGNED IN VIEW --- */}
-            <SignedIn>
+            {/* --- 2. ACTIVE USER VIEW (REAL OR GUEST) --- */}
+            {activeUser && (
                 <Container size="md" py="xl"> 
                     <Stack gap="lg" align="center">
                         
                         <AppHeader 
-                            user={user} 
+                            user={activeUser} 
                             isLoaded={isLoaded} 
                             identity={identity} 
                             stats={stats} 
                             avatarTs={avatarTs} 
-                            onLogout={() => signOut()}
+                            onLogout={handleLogout}
                         />
 
                         <Tabs defaultValue="battle" keepMounted={false}>
@@ -1000,33 +1049,33 @@ function RapBattleApp() {
                                             <OpponentSelector current={opponent} setOpponent={setOpponent} />
                                             <Group justify="center">
                                                 <Switch 
-													label="Word Challenge" 
-													checked={wordMode} 
-													onChange={(e) => {
-														const isOn = e.currentTarget.checked;
-														setWordMode(isOn); 
-														if (isOn) refreshWord();}}
-													size="md"
-												/>
+                                                    label="Word Challenge" 
+                                                    checked={wordMode} 
+                                                    onChange={(e) => {
+                                                        const isOn = e.currentTarget.checked;
+                                                        setWordMode(isOn); 
+                                                        if (isOn) refreshWord();}}
+                                                    size="md"
+                                                />
                                             </Group>
                                             {wordMode && <WordDisplay word={targetWord} onRefresh={refreshWord} />}
                                             <Divider style={{ opacity: 0.5 }} />
-											{!isSpectator ? (
-												<BattleInputArea 
-													input={input} setInput={setInput} 
-													isRecording={isRecording} toggleMic={toggleMic} 
-													handleSend={handleBattle} isLoading={isLoading} status={status} 
-													placeholder={wordMode ? `Freestyle using "${targetWord}"...` : "Freestyle your bars..."} 
-                                            	/>
-											) : (
-												<Card bg="gray.1" radius="md" p="lg" ta="center">
-												<Stack align="center" gap={5}>
-													<IconUsers size={32} />
-													<Title order={4}>Spectator Mode</Title>
-													<Text size="sm" c="dimmed">You are watching the battle live.</Text>
-													</Stack>
-												</Card>
-											)}
+                                            {!isSpectator ? (
+                                                <BattleInputArea 
+                                                    input={input} setInput={setInput} 
+                                                    isRecording={isRecording} toggleMic={toggleMic} 
+                                                    handleSend={handleBattle} isLoading={isLoading} status={status} 
+                                                    placeholder={wordMode ? `Freestyle using "${targetWord}"...` : "Freestyle your bars..."} 
+                                                />
+                                            ) : (
+                                                <Card bg="gray.1" radius="md" p="lg" ta="center">
+                                                <Stack align="center" gap={5}>
+                                                    <IconUsers size={32} />
+                                                    <Title order={4}>Spectator Mode</Title>
+                                                    <Text size="sm" c="dimmed">You are watching the battle live.</Text>
+                                                    </Stack>
+                                                </Card>
+                                            )}
                                             
                                         </Stack>
                                     </Card>
@@ -1034,8 +1083,8 @@ function RapBattleApp() {
                                     {lastBattle && (
                                         <Card mt="lg" padding="lg" radius="md" withBorder bg="gray.0">
                                             
-											{/* HEADER: SHOW RESULT OR LOADING */}
-											<Group justify="space-between" mb="sm">
+                                            {/* HEADER: SHOW RESULT OR LOADING */}
+                                            <Group justify="space-between" mb="sm">
                                                 <Title order={4}>Results</Title>
                                                 {lastBattle.scores ? (
                                                     <Badge color={lastBattle.result === 'win' ? 'green' : 'red'} size="lg">
@@ -1047,109 +1096,109 @@ function RapBattleApp() {
                                             </Group>
 
                                             {/* SECTION 1: SCOREBOARD */}
-											{lastBattle.scores ? (
-												<>
-													<Grid>
-														{/* USER SCORE CARD */}
-														<Grid.Col span={6}>
-															<Card bg="white" withBorder h="100%">
-																<Text size="xs" c="dimmed" fw={700}>YOU ({identity?.mc_name || 'User'})</Text>
-																<Title order={2} c="blue">
-																	{lastBattle.scores.user.total || 0}
-																</Title>
-																
-																<Stack gap={2} mt={5}>
-																	<Group justify="space-between">
-																		<Text size="xs">Rhyme:</Text>
-																		<Text size="xs" fw={700}>{lastBattle.scores.user.rhyme || 0}</Text>
-																	</Group>
-																	<Group justify="space-between">
-																		<Text size="xs">Flow:</Text>
-																		<Text size="xs" fw={700}>{lastBattle.scores.user.flow || 0}</Text>
-																	</Group>
-																	<Group justify="space-between">
-																		<Text size="xs">Roasts:</Text>
-																		<Text size="xs" fw={700}>{lastBattle.scores.user.insults || 0}</Text>
-																	</Group>
-																	<Group justify="space-between">
-																		<Text size="xs">Creative:</Text>
-																		<Text size="xs" fw={700}>{lastBattle.scores.user.creativity || 0}</Text>
-																	</Group>
-																	
-																	{/* Word Bonus Display */}
-																	{lastBattle.scores.user.word_bonus > 0 && (
-																		<Group justify="space-between">
-																			<Text size="xs" c="orange" fw={700}>Word Bonus:</Text>
-																			<Text size="xs" c="orange" fw={700}>+10</Text>
-																		</Group>
-																	)}
-																</Stack>
-															</Card>
-														</Grid.Col>
+                                            {lastBattle.scores ? (
+                                                <>
+                                                    <Grid>
+                                                        {/* USER SCORE CARD */}
+                                                        <Grid.Col span={6}>
+                                                            <Card bg="white" withBorder h="100%">
+                                                                <Text size="xs" c="dimmed" fw={700}>YOU ({identity?.mc_name || 'User'})</Text>
+                                                                <Title order={2} c="blue">
+                                                                    {lastBattle.scores.user.total || 0}
+                                                                </Title>
+                                                                
+                                                                <Stack gap={2} mt={5}>
+                                                                    <Group justify="space-between">
+                                                                        <Text size="xs">Rhyme:</Text>
+                                                                        <Text size="xs" fw={700}>{lastBattle.scores.user.rhyme || 0}</Text>
+                                                                    </Group>
+                                                                    <Group justify="space-between">
+                                                                        <Text size="xs">Flow:</Text>
+                                                                        <Text size="xs" fw={700}>{lastBattle.scores.user.flow || 0}</Text>
+                                                                    </Group>
+                                                                    <Group justify="space-between">
+                                                                        <Text size="xs">Roasts:</Text>
+                                                                        <Text size="xs" fw={700}>{lastBattle.scores.user.insults || 0}</Text>
+                                                                    </Group>
+                                                                    <Group justify="space-between">
+                                                                        <Text size="xs">Creative:</Text>
+                                                                        <Text size="xs" fw={700}>{lastBattle.scores.user.creativity || 0}</Text>
+                                                                    </Group>
+                                                                    
+                                                                    {/* Word Bonus Display */}
+                                                                    {lastBattle.scores.user.word_bonus > 0 && (
+                                                                        <Group justify="space-between">
+                                                                            <Text size="xs" c="orange" fw={700}>Word Bonus:</Text>
+                                                                            <Text size="xs" c="orange" fw={700}>+10</Text>
+                                                                        </Group>
+                                                                    )}
+                                                                </Stack>
+                                                            </Card>
+                                                        </Grid.Col>
 
-														{/* AI SCORE CARD */}
-														<Grid.Col span={6}>
-															<Card bg="white" withBorder h="100%">
-																<Text size="xs" c="dimmed" fw={700}>{lastBattle.opponent?.toUpperCase() || "AI"}</Text>
-																<Title order={2} c="red">
-																	{lastBattle.scores.ai.total || 0}
-																</Title>
-																
-																<Stack gap={2} mt={5}>
-																	<Group justify="space-between">
-																		<Text size="xs">Rhyme:</Text>
-																		<Text size="xs" fw={700}>{lastBattle.scores.ai.rhyme || 0}</Text>
-																	</Group>
-																	<Group justify="space-between">
-																		<Text size="xs">Flow:</Text>
-																		<Text size="xs" fw={700}>{lastBattle.scores.ai.flow || 0}</Text>
-																	</Group>
-																	<Group justify="space-between">
-																		<Text size="xs">Roasts:</Text>
-																		<Text size="xs" fw={700}>{lastBattle.scores.ai.insults || 0}</Text>
-																	</Group>
-																	<Group justify="space-between">
-																		<Text size="xs">Creative:</Text>
-																		<Text size="xs" fw={700}>{lastBattle.scores.ai.creativity || 0}</Text>
-																	</Group>
-																</Stack>
-															</Card>
-														</Grid.Col>
-													</Grid>
+                                                        {/* AI SCORE CARD */}
+                                                        <Grid.Col span={6}>
+                                                            <Card bg="white" withBorder h="100%">
+                                                                <Text size="xs" c="dimmed" fw={700}>{lastBattle.opponent?.toUpperCase() || "AI"}</Text>
+                                                                <Title order={2} c="red">
+                                                                    {lastBattle.scores.ai.total || 0}
+                                                                </Title>
+                                                                
+                                                                <Stack gap={2} mt={5}>
+                                                                    <Group justify="space-between">
+                                                                        <Text size="xs">Rhyme:</Text>
+                                                                        <Text size="xs" fw={700}>{lastBattle.scores.ai.rhyme || 0}</Text>
+                                                                    </Group>
+                                                                    <Group justify="space-between">
+                                                                        <Text size="xs">Flow:</Text>
+                                                                        <Text size="xs" fw={700}>{lastBattle.scores.ai.flow || 0}</Text>
+                                                                    </Group>
+                                                                    <Group justify="space-between">
+                                                                        <Text size="xs">Roasts:</Text>
+                                                                        <Text size="xs" fw={700}>{lastBattle.scores.ai.insults || 0}</Text>
+                                                                    </Group>
+                                                                    <Group justify="space-between">
+                                                                        <Text size="xs">Creative:</Text>
+                                                                        <Text size="xs" fw={700}>{lastBattle.scores.ai.creativity || 0}</Text>
+                                                                    </Group>
+                                                                </Stack>
+                                                            </Card>
+                                                        </Grid.Col>
+                                                    </Grid>
 
-													{/* JUDGE'S COMMENT */}
-													<Text size="sm" mt="md" fs="italic" c="dimmed" ta="center">
-														"{lastBattle.scores.comment}"
-													</Text>
+                                                    {/* JUDGE'S COMMENT */}
+                                                    <Text size="sm" mt="md" fs="italic" c="dimmed" ta="center">
+                                                        "{lastBattle.scores.comment}"
+                                                    </Text>
 
-													{/* RETRY BUTTON */}
-													{(lastBattle.scores.user.total === 0 && lastBattle.scores.ai.total === 0) && (
-														<Center mt="md">
-															<Button 
-																color="orange" 
-																variant="light" 
-																leftSection={<IconRefresh size={16} />} 
-																onClick={retryJudging}
-																loading={isLoading}
-															>
-																Retry Judging
-															</Button>
-														</Center>
-													)}
-												</>
-											) : (
-												/* JUDGING SKELETON*/
-												<Card bg="white" withBorder p="md">
-													<Stack align="center" gap="md">
-														<Loader size="md" type="bars" color="orange" />
-														<Text c="dimmed" size="sm" fs="italic">The judges are reviewing the transcript...</Text>
-														<Group style={{ width: '100%' }}>
-															<Skeleton height={8} radius="xl" width="60%" />
-															<Skeleton height={8} radius="xl" width="80%" />
-														</Group>
-													</Stack>
-												</Card>
-											)}
+                                                    {/* RETRY BUTTON */}
+                                                    {(lastBattle.scores.user.total === 0 && lastBattle.scores.ai.total === 0) && (
+                                                        <Center mt="md">
+                                                            <Button 
+                                                                color="orange" 
+                                                                variant="light" 
+                                                                leftSection={<IconRefresh size={16} />} 
+                                                                onClick={retryJudging}
+                                                                loading={isLoading}
+                                                            >
+                                                                Retry Judging
+                                                            </Button>
+                                                        </Center>
+                                                    )}
+                                                </>
+                                            ) : (
+                                                /* JUDGING SKELETON*/
+                                                <Card bg="white" withBorder p="md">
+                                                    <Stack align="center" gap="md">
+                                                        <Loader size="md" type="bars" color="orange" />
+                                                        <Text c="dimmed" size="sm" fs="italic">The judges are reviewing the transcript...</Text>
+                                                        <Group style={{ width: '100%' }}>
+                                                            <Skeleton height={8} radius="xl" width="60%" />
+                                                            <Skeleton height={8} radius="xl" width="80%" />
+                                                        </Group>
+                                                    </Stack>
+                                                </Card>
+                                            )}
                                             
                                             <Divider my="md" />
 
@@ -1237,7 +1286,7 @@ function RapBattleApp() {
                                             
                                             <Divider style={{ width: '100%' }} label="Settings" labelPosition="center"/>
 
-											{/* ROUND SELECTOR */}
+                                            {/* ROUND SELECTOR */}
                                             <Group>
                                                 <Text size="sm" fw={700}>Rounds:</Text>
                                                 <SegmentedControl 
@@ -1265,7 +1314,7 @@ function RapBattleApp() {
                                                 />
                                             </Group>
 
-											{/* MODE SELECTOR */}
+                                            {/* MODE SELECTOR */}
                                             <SegmentedControl 
                                                 value={battleMode} 
                                                 onChange={setBattleMode} 
@@ -1273,14 +1322,14 @@ function RapBattleApp() {
                                             />
                                             
                                             <Switch 
-													label="Word Challenge" 
-													checked={wordMode} 
-													onChange={(e) => {
-														const isOn = e.currentTarget.checked;
-														setWordMode(isOn); 
-														if (isOn) refreshWord();}}
-													size="md"
-												/>
+                                                label="Word Challenge" 
+                                                checked={wordMode} 
+                                                onChange={(e) => {
+                                                    const isOn = e.currentTarget.checked;
+                                                    setWordMode(isOn); 
+                                                    if (isOn) refreshWord();}}
+                                                size="md"
+                                            />
                                             <Button variant="subtle" color="red" onClick={() => { ws.current.close(); setMode('menu'); }}>Cancel</Button>
                                         </Stack>
                                     </Card>
@@ -1309,10 +1358,10 @@ function RapBattleApp() {
                                     </Card>
                                 )}
 
-								{mode === 'pre_battle' && (
+                                {mode === 'pre_battle' && (
                                     <PreBattleCard 
-                                        user={user}
-                                        identity={identity} // <--- ADD THIS PROP
+                                        user={activeUser}
+                                        identity={identity}
                                         opponent={p1Data} 
                                         avatarTs={avatarTs}
                                         config={{
@@ -1329,7 +1378,7 @@ function RapBattleApp() {
                                         <Stack gap="md">
                                             <Group justify="space-between">
                                                 <Group>
-                                                    <Avatar src={p1Data?.id ? `/avatar/${user.id}` : null} radius="xl" color="blue">{p1Data?.name?.[0]}</Avatar>
+                                                    <Avatar src={p1Data?.id ? `/avatar/${p1Data.id}` : null} radius="xl" color="blue">{p1Data?.name?.[0]}</Avatar>
                                                     <Stack gap={0}>
                                                         <Text size="xs" c="dimmed">OPPONENT</Text>
                                                         <Title order={5}>{p1Data?.name || "Unknown"}</Title>
@@ -1347,39 +1396,39 @@ function RapBattleApp() {
                                             {wordMode && <WordDisplay word={targetWord} />}
                                             <Divider />
 
-											{/* CHAT LOG */}
+                                            {/* CHAT LOG */}
                                             <Stack gap="sm" style={{ height: 300, overflowY: 'auto' }}>
                                                 {battleLog.length === 0 && <Text c="dimmed" ta="center" fs="italic" mt="xl">The battle begins! {isMyTurn ? "You go first!" : "Opponent goes first."}</Text>}
                                                 
                                                 {battleLog.map((log, i) => (
                                                     <Group key={i} justify={log.sender === 'me' ? 'flex-end' : 'flex-start'} align="flex-start">
-														{/* OPPONENT AVATAR */}
+                                                        {/* OPPONENT AVATAR */}
                                                         {log.sender !== 'me' && <Avatar size="sm" radius="xl" src={`/avatar/${p1Data?.id}`} />}
 
-														{/* MESSAGE BUBBLE */}
+                                                        {/* MESSAGE BUBBLE */}
                                                         <Card bg={log.sender === 'me' ? 'blue.1' : 'gray.1'} radius="md" p="sm" style={{ maxWidth: '80%' }}>
-															<Group gap="xs">
-																{/* PLAY BUTTON (Always Visible) */}
-																<ActionIcon 
-																	variant="light" color={log.sender === 'me' ? 'blue' : 'dark'} radius="xl" 
-																	onClick={() => handleManualPlay(log)}
-																>
-																	<IconPlayerPlay size={14} />
-																</ActionIcon>
-																{/* TEXT CONTENT */}
-																<Text size="sm" style={{ whiteSpace: 'pre-line' }}>
-																	{log.audio ? "(Audio Verse)" : log.text}
-																</Text>
-															</Group>
+                                                            <Group gap="xs">
+                                                                {/* PLAY BUTTON (Always Visible) */}
+                                                                <ActionIcon 
+                                                                    variant="light" color={log.sender === 'me' ? 'blue' : 'dark'} radius="xl" 
+                                                                    onClick={() => handleManualPlay(log)}
+                                                                >
+                                                                    <IconPlayerPlay size={14} />
+                                                                </ActionIcon>
+                                                                {/* TEXT CONTENT */}
+                                                                <Text size="sm" style={{ whiteSpace: 'pre-line' }}>
+                                                                    {log.audio ? "(Audio Verse)" : log.text}
+                                                                </Text>
+                                                            </Group>
                                                         </Card>
 
-														{/* MY AVATAR */}
+                                                        {/* MY AVATAR */}
                                                         {log.sender === 'me' && (
-                                                            <Avatar size="sm" radius="xl" src={user?.id ? `/avatar/${user.id}` : null}>{user?.firstName?.[0]}</Avatar>
+                                                            <Avatar size="sm" radius="xl" src={activeUser?.id ? `/avatar/${activeUser.id}` : null}>{activeUser?.firstName?.[0]}</Avatar>
                                                         )}
                                                     </Group>
                                                 ))}
-												<div ref={chatEndRef}/>
+                                                <div ref={chatEndRef}/>
                                             </Stack>
 
                                             <Divider />
@@ -1436,7 +1485,7 @@ function RapBattleApp() {
                                     </Card>
                                 )}
 
-								{mode === 'judging...' && (
+                                {mode === 'judging...' && (
                                     <Card shadow="sm" padding="xl" withBorder>
                                         <Stack align="center" gap="xl" py="xl">
                                             {/* Animated Bars Loader */}
@@ -1467,41 +1516,41 @@ function RapBattleApp() {
                                     </Card>
                                 )}
 
-								{showVoting && (
-									<Modal 
-										opened={true} 
-										onClose={() => {}} 
-										withCloseButton={false} 
-										title={<Group><IconSwords/><Text fw={700}>WHO WON?</Text></Group>}
-										centered
-									>
-										<Stack align="center">
-											<Text size="xl" fw={900} c="orange">{voteTimer}s remaining</Text>
-											<Text c="dimmed" size="sm" ta="center">Cast your vote to influence the final score!</Text>
+                                {showVoting && (
+                                    <Modal 
+                                        opened={true} 
+                                        onClose={() => {}} 
+                                        withCloseButton={false} 
+                                        title={<Group><IconSwords/><Text fw={700}>WHO WON?</Text></Group>}
+                                        centered
+                                    >
+                                        <Stack align="center">
+                                            <Text size="xl" fw={900} c="orange">{voteTimer}s remaining</Text>
+                                            <Text c="dimmed" size="sm" ta="center">Cast your vote to influence the final score!</Text>
 
-											{!hasVoted ? (
-												<Group grow style={{ width: '100%' }}>
-													<Button 
-														size="xl" color="blue" variant="light"
-														onClick={() => { ws.current.send(JSON.stringify({ type: 'VOTE', vote: 'p1' })); setHasVoted(true); }}
-													>
-														{p1Data?.name || "Player 1"}
-													</Button>
-													<Button 
-														size="xl" color="red" variant="light"
-														onClick={() => { ws.current.send(JSON.stringify({ type: 'VOTE', vote: 'p2' })); setHasVoted(true); }}
-													>
-														{p1Data?.name ? "Player 2" : "Player 2"} 
-													</Button>
-												</Group>
-											) : (
-												<Card bg="green.1" w="100%" ta="center" p="lg">
-													<Title order={3} c="green">VOTE CAST</Title>
-												</Card>
-											)}
-										</Stack>
-									</Modal>
-								)}
+                                            {!hasVoted ? (
+                                                <Group grow style={{ width: '100%' }}>
+                                                    <Button 
+                                                        size="xl" color="blue" variant="light"
+                                                        onClick={() => { ws.current.send(JSON.stringify({ type: 'VOTE', vote: 'p1' })); setHasVoted(true); }}
+                                                    >
+                                                        {p1Data?.name || "Player 1"}
+                                                    </Button>
+                                                    <Button 
+                                                        size="xl" color="red" variant="light"
+                                                        onClick={() => { ws.current.send(JSON.stringify({ type: 'VOTE', vote: 'p2' })); setHasVoted(true); }}
+                                                    >
+                                                        {p1Data?.name ? "Player 2" : "Player 2"} 
+                                                    </Button>
+                                                </Group>
+                                            ) : (
+                                                <Card bg="green.1" w="100%" ta="center" p="lg">
+                                                    <Title order={3} c="green">VOTE CAST</Title>
+                                                </Card>
+                                            )}
+                                        </Stack>
+                                    </Modal>
+                                )}
 
                                 {mode === 'result' && duelResult && (
                                     <Card shadow="sm" padding="xl" withBorder>
@@ -1531,10 +1580,10 @@ function RapBattleApp() {
                                                                 <Group justify="space-between"><Text size="xs">Flow:</Text><Text size="xs" fw={700}>{duelResult.scores.p1.flow}</Text></Group>
                                                                 <Group justify="space-between"><Text size="xs">Bars:</Text><Text size="xs" fw={700}>{duelResult.scores.p1.bars}</Text></Group>
                                                                 <Group justify="space-between"><Text size="xs">Aggro:</Text><Text size="xs" fw={700}>{duelResult.scores.p1.aggression}</Text></Group>
-																<Group justify="space-between">
-																	<Text size="xs" fw={900} c="grape">Audience:</Text>
-																	<Text size="xs" fw={900} c="grape">+{duelResult.scores?.p1?.audience || 0}</Text>
-																</Group>
+                                                                <Group justify="space-between">
+                                                                    <Text size="xs" fw={900} c="grape">Audience:</Text>
+                                                                    <Text size="xs" fw={900} c="grape">+{duelResult.scores?.p1?.audience || 0}</Text>
+                                                                </Group>
                                                             </Stack>
                                                         )}
                                                     </Card>
@@ -1561,15 +1610,15 @@ function RapBattleApp() {
                                             <Text c="dimmed" mt="md" ta="center" fs="italic">"{duelResult.scores.comment}"</Text>
                                             
                                             <Group justify="center" mt="lg">
-											<Button onClick={() => { setMode("menu"); setInput(''); }}>Back to Menu</Button>
-											<Button 
-												variant="light" 
-												leftSection={<IconShare size={16}/>} 
-												onClick={shareReplay}
-											>
-												Share Replay
-											</Button>
-										</Group>
+                                            <Button onClick={() => { setMode("menu"); setInput(''); }}>Back to Menu</Button>
+                                            <Button 
+                                                variant="light" 
+                                                leftSection={<IconShare size={16}/>} 
+                                                onClick={shareReplay}
+                                            >
+                                                Share Replay
+                                            </Button>
+                                        </Group>
                                         </Stack>
                                     </Card>
                                 )}
@@ -1586,36 +1635,51 @@ function RapBattleApp() {
 
                             {/* --- 6. PROFILE TAB --- */}
                             <Tabs.Panel value="profile" pt="md">
-                                <Stack gap="xl">
-                                    <ProfileView
-                                        user={user}
-                                        stats={stats}
-                                        identity={identity}
-                                        onUpdateProfile={updateProfileLogic}
-                                        uploading={uploading}
-                                        avatarTs={avatarTs}
-                                    />
-                                    
-                                    <Container size="sm" style={{ width: '100%' }}>
-                                        <Divider label={<Badge variant="outline">Full Battle History</Badge>} labelPosition="center" mb="lg" />
-										<Stack gap="md">
-											{history.map((item) => (
-												<HistoryItem 
-													key={item.id} 
-													item={item} 
-													playAudio={loadAndPlayAudio} 
-													identity={identity} // <--- CRITICAL: Do not forget this!
-												/>
-											))}
-										</Stack>
-                                        {history.length > 0 && <Center mt="md"><Button variant="subtle" color="red" onClick={clearHistory}>Clear History</Button></Center>}
-                                    </Container>
-                                </Stack>
+                                {activeUser.isGuest ? (
+                                    <Card withBorder padding="xl" ta="center">
+                                        <Stack align="center" gap="lg">
+                                            <IconUserCircle size={64} color="#adb5bd" />
+                                            <Title order={3}>Guest Mode</Title>
+                                            <Text c="dimmed">
+                                                You are playing as <b>{activeUser.firstName}</b>.
+                                                <br/>
+                                                Sign up to save your battle history, upload a custom avatar, and climb the leaderboard!
+                                            </Text>
+                                            <Button mt="md" size="lg" onClick={() => window.location.reload()}>Sign Up Now</Button>
+                                        </Stack>
+                                    </Card>
+                                ) : (
+                                    <Stack gap="xl">
+                                        <ProfileView 
+                                            user={activeUser}
+                                            stats={stats}
+                                            identity={identity}
+                                            onUpdateProfile={updateProfileLogic}
+                                            uploading={uploading}
+                                            avatarTs={avatarTs}
+                                        />
+                                        
+                                        <Container size="sm" style={{ width: '100%' }}>
+                                            <Divider label={<Badge variant="outline">Full Battle History</Badge>} labelPosition="center" mb="lg" />
+                                            <Stack gap="md">
+                                                {history.map((item) => (
+                                                    <HistoryItem 
+                                                        key={item.id} 
+                                                        item={item} 
+                                                        playAudio={loadAndPlayAudio} 
+                                                        identity={identity}
+                                                    />
+                                                ))}
+                                            </Stack>
+                                            {history.length > 0 && <Center mt="md"><Button variant="subtle" color="red" onClick={clearHistory}>Clear History</Button></Center>}
+                                        </Container>
+                                    </Stack>
+                                )}
                             </Tabs.Panel>
                         </Tabs>
                     </Stack>
                 </Container>
-            </SignedIn>
+            )}
         </>
     );
 }

@@ -13,6 +13,11 @@ app.use('/*', cors());
 
 // --- HELPER: VERIFY AUTH ---
 async function verifyAuth(c) {
+    const guestId = c.req.header('x-guest-id');
+    if (guestId && guestId.startsWith('guest_')) {
+        return guestId;
+    }
+
     const authHeader = c.req.header('Authorization');
     if (!authHeader) throw new Error("Missing Authorization Header");
 
@@ -244,7 +249,9 @@ app.post('/battle/judge', async (c) => {
         } catch(e) { console.error(e); }
     };
 
-    c.executionCtx.waitUntil(updateTask(userId));
+    if (!userId.startsWith('guest_')) {
+        c.executionCtx.waitUntil(updateTask(userId));
+    }
 
     // Return pointsEarned so Frontend can save it to history
     return c.json({ result, scores, battleId, pointsEarned: totalPointsEarned });

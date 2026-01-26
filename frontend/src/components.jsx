@@ -13,54 +13,67 @@ import { OPPONENTS } from '../../src/constants';
 
 // --- SUB-COMPONENTS ---
 
+// components.js
+
+// --- 1. UPDATED APP HEADER (Works for Guests) ---
 export const AppHeader = ({ user, isLoaded, identity, stats, avatarTs, onLogout }) => {
-    const avatarUrl = user ? `/avatar/${user.id}?t=${avatarTs}` : null;
+    // Determine Avatar URL
+    const avatarUrl = user?.id?.startsWith('guest_') 
+        ? null // No avatar for guests
+        : `/avatar/${user?.id}?t=${avatarTs}`;
+
+    // Get initials for fallback
+    const initials = user?.firstName ? user.firstName[0].toUpperCase() : '?';
+
+    // Show nothing if Clerk isn't loaded yet
+    if (!isLoaded) return null;
 
     return (
         <Stack align="center" gap="xl" mb={30} mt="lg">
             <Group gap="md" p={6} bg="gray.0" style={{ borderRadius: '50px', border: '1px solid #e9ecef', paddingRight: 12 }}>
-                {!isLoaded ? null : (
-                    <>
-                        <SignedIn>
-                            <Menu shadow="md" width={200} position="bottom-end">
-                                <Menu.Target>
-                                    <Avatar 
-                                        src={avatarUrl} 
-                                        alt={user?.firstName} 
-                                        size={40} 
-                                        radius="xl"
-                                        style={{ cursor: 'pointer', border: '2px solid #228be6' }}
-                                    >
-                                        {user?.firstName?.[0]}
-                                    </Avatar>
-                                </Menu.Target>
+                
+                {/* MENU & AVATAR */}
+                <Menu shadow="md" width={200} position="bottom-end">
+                    <Menu.Target>
+                        <Avatar 
+                            src={avatarUrl} 
+                            alt={user?.firstName} 
+                            size={40} 
+                            radius="xl"
+                            color={user?.isGuest ? 'orange' : 'blue'}
+                            style={{ cursor: 'pointer', border: '2px solid #228be6' }}
+                        >
+                            {initials}
+                        </Avatar>
+                    </Menu.Target>
 
-                                <Menu.Dropdown>
-                                    <Menu.Label>My Account</Menu.Label>
-                                    <Menu.Item leftSection={<IconUser size={14} />}>
-                                        Signed in as {identity?.mc_name || user?.firstName}
-                                    </Menu.Item>
-                                    <Divider />
-                                    <Menu.Item 
-                                        color="red" 
-                                        leftSection={<IconLogout size={14} />}
-                                        onClick={onLogout}
-                                    >
-                                        Log Out
-                                    </Menu.Item>
-                                </Menu.Dropdown>
-                            </Menu>
+                    <Menu.Dropdown>
+                        <Menu.Label>My Account</Menu.Label>
+                        <Menu.Item leftSection={<IconUser size={14} />}>
+                            {identity?.mc_name || user?.firstName || "MC Unknown"}
+                        </Menu.Item>
+                        <Divider />
+                        <Menu.Item 
+                            color="red" 
+                            leftSection={<IconLogout size={14} />}
+                            onClick={onLogout}
+                        >
+                            {user?.isGuest ? "Exit Guest Mode" : "Log Out"}
+                        </Menu.Item>
+                    </Menu.Dropdown>
+                </Menu>
 
-                            <Badge size="lg" variant="dot" color="blue" radius="sm" style={{ background: 'transparent', border: 'none' }}>
-                                Rank: {stats.rank || "Novice"}
-                            </Badge>
-                            <Divider orientation="vertical" />
-                            <Text size="xs" fw={700} c="dimmed">
-                                {stats.score !== undefined ? `${stats.score} PTS` : '0 PTS'}
-                            </Text>
-                        </SignedIn>
-                    </>
-                )}
+                {/* STATS BADGE */}
+                <Badge size="lg" variant="dot" color={user?.isGuest ? 'gray' : 'blue'} radius="sm" style={{ background: 'transparent', border: 'none' }}>
+                    Rank: {stats.rank || "Novice"}
+                </Badge>
+                
+                <Divider orientation="vertical" />
+                
+                <Text size="xs" fw={700} c="dimmed">
+                    {stats.score !== undefined ? `${stats.score} PTS` : '0 PTS'}
+                </Text>
+
             </Group>
         </Stack>
     );
@@ -441,10 +454,9 @@ export const ProfileView = ({ user, stats, identity, onUpdateProfile, uploading,
 };
 
 // --- SPLASH PAGE ---
-export const SplashPage = () => (
+export const SplashPage = ({ onGuestLogin }) => ( // <--- FIX: Added { } here
     <Container size="xs" h="100vh" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
         <Card shadow="xl" padding="xl" radius="lg" withBorder style={{ overflow: 'visible' }}>
-            {/* DECORATIVE ICON */}
             <div style={{ 
                 position: 'absolute', top: -40, left: '50%', transform: 'translateX(-50%)',
                 background: 'linear-gradient(45deg, #228be6, #15aabf)', padding: 20, borderRadius: '50%',
@@ -471,9 +483,20 @@ export const SplashPage = () => (
                             gradient={{ from: 'blue', to: 'cyan' }}
                             rightSection={<IconFlame size={20} />}
                         >
-                            Enter the Arena
+                            Sign In
                         </Button>
                     </SignInButton>
+                    
+                    {/* Guest Button */}
+                    <Button 
+                        size="xl" 
+                        radius="xl" 
+                        variant="outline" 
+                        color="gray"
+                        onClick={onGuestLogin}
+                    >
+                        Guest Mode
+                    </Button>
                 </Group>
                 
                 <Divider my="sm" label="Features" labelPosition="center" style={{ width: '100%' }} />
