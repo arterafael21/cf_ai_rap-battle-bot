@@ -12,7 +12,7 @@ import { ClerkProvider, SignedIn, SignedOut, useUser, useAuth, useClerk, SignInB
 
 // IMPORTS
 import { getRandomWord } from '../../src/constants';
-import { AppHeader, WordDisplay, OpponentSelector, BattleInputArea, HistoryItem, OnboardingFlow, ProfileView, SplashPage, VerseDisplay, PreBattleCard } from './components';
+import { AppHeader, WordDisplay, OpponentSelector, BattleInputArea, HistoryItem, OnboardingFlow, ProfileView, SplashPage, VerseDisplay, PreBattleCard, SmartAudioPlayer } from './components';
 
 const CLERK_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 if (!CLERK_KEY) throw new Error("Missing Publishable Key");
@@ -60,6 +60,7 @@ function RapBattleApp() {
 
     const [history, setHistory] = useState([]);
     const [lastBattle, setLastBattle] = useState(null);
+    const [lastAiAudio, setLastAiAudio] = useState(null);
     const [input, setInput] = useState(''); 
     const [opponent, setOpponent] = useState('roboflow');
     const [status, setStatus] = useState('Ready');
@@ -426,10 +427,11 @@ function RapBattleApp() {
 
     // SINGLE PLAYER BATTLE
     const handleBattle = async () => {
-        // FIX: Changed 'user' to 'activeUser'
         if (!activeUser) return alert("Please sign in!");
         if (!input) return alert('Freestyle something!');
 
+        setLastBattle(null);
+        setLastAiAudio(null);
         setLastBattle(null); 
         setReadyAudioIds(prev => {
             const next = new Set(prev);
@@ -462,7 +464,6 @@ function RapBattleApp() {
             setInput('');
 
             // 2. TRIGGER TTS (Background - Don't await yet!)
-
             const audioPromise = loadAndPlayAudio('last-battle', genData.aiVerse, opponent, true);
 
             // 3. JUDGE (Happens while audio is fetching)
@@ -560,6 +561,11 @@ function RapBattleApp() {
             }
 
             const url = URL.createObjectURL(blob);
+
+            if (battleId === 'last-battle') {
+                setLastAiAudio(url);
+            }
+
             audioCache.current[battleId] = url;
             
             // Mark as ready so the button "pops up"
@@ -671,6 +677,7 @@ function RapBattleApp() {
         const queueWs = new WebSocket(wsUrl);
 
         queueWs.onclose = (event) => {
+            console.error(`[WS-DEBUG] Connection CLOSED. Code: ${event.code}, Reason: "${event.reason}"`); 
             console.log("WS Closed:", event.code, event.reason);
             if (!event.wasClean) {
                 alert(`WS Closed Code: ${event.code}\nReason: ${event.reason || "Unknown Network/Server Error"}`);
@@ -679,6 +686,7 @@ function RapBattleApp() {
         };
 
         queueWs.onerror = (err) => {
+            console.error("[WS-DEBUG] Connection ERROR:", err); 
             console.error("[Queue] Connection Error:", err);
         };
 
@@ -710,6 +718,7 @@ function RapBattleApp() {
         ws.current = socket;
 
         socket.onopen = async () => {
+            console.log("[WS-DEBUG] Connection OPENED")
             const myName = identity?.mc_name || activeUser?.firstName || 'Guest';
             socket.send(JSON.stringify({ 
                 type: 'INIT', 
@@ -1245,10 +1254,7 @@ function RapBattleApp() {
                                                 p2Verse={lastBattle.aiVerse}
                                                 p1Title="YOUR VERSE"
                                                 p2Title="AI RESPONSE"
-                                                onPlayAudio={() => loadAndPlayAudio('last-battle', lastBattle.aiVerse, opponent)} 
-                                                loading={activeAudioId === 'last-battle'}
-                                                playDisabled={activeAudioId !== null && activeAudioId !== 'last-battle'}
-                                                isReady={readyAudioIds.has('last-battle')}
+                                                p2Audio={lastAiAudio}
                                             />
                                         </Card>
                                     )}
@@ -1315,12 +1321,12 @@ function RapBattleApp() {
                                         <Stack align="center">
                                             <Loader size="lg" variant="dots" />
                                             <Title order={3}>Waiting for Opponent</Title>
-                                            {/* UPDATED CODE SECTION */}
+                                            
                                             <Group>
                                                 <Text fw={700}>CODE:</Text>
-                                                <Badge size="xl" variant="filled" color="oklch-blue">{battleCode}</Badge>
+                                                <Badge size="xl" variant="filled" color="indigo">{battleCode}</Badge>
                                                 
-                                                {/* 1. Existing Copy Code Button */}
+                                                {/* 1. Copy Code Button */}
                                                 <CopyButton value={battleCode}>
                                                     {({ copied, copy }) => (
                                                         <Button size="xs" onClick={copy} color={copied ? 'teal' : 'blue'}>
@@ -1329,7 +1335,7 @@ function RapBattleApp() {
                                                     )}
                                                 </CopyButton>
 
-                                                {/* 2. NEW Share Link Button */}
+                                                {/* 2. Share Link Button */}
                                                 <Button 
                                                     size="xs" 
                                                     variant="light" 
@@ -1634,6 +1640,8 @@ function RapBattleApp() {
                                                     p2Verse={duelResult.p2_verse}
                                                     p1Title="PLAYER 1"
                                                     p2Title="PLAYER 2"
+                                                    p1Audio={duelResult.transcript?.find(t => t.username === duelResult.p1_name || t.round % 2 !== 0)?.audioData}
+                                                    p2Audio={duelResult.transcript?.find(t => t.username === duelResult.p2_name || t.round % 2 === 0)?.audioData}
                                                 />
                                             </div>
 

@@ -27,7 +27,7 @@
 	},
 	"migrations": [
         {
-            "tag": "v1",
+            "tag": "<v1>",
             "new_sqlite_classes": [
                 "UserProfile",
                 "Leaderboard",

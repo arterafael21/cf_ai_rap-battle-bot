@@ -9,7 +9,6 @@ import { Matchmaker } from './Matchmaker'
 
 const app = new Hono();
 
-
 app.get('/ws/queue', async (c) => {
     const upgrade = c.req.header('Upgrade');
     if (!upgrade || upgrade.toLowerCase() !== 'websocket') {
@@ -25,13 +24,20 @@ app.get('/ws/battle/:id', async (c) => {
     if (!upgrade || upgrade.toLowerCase() !== 'websocket') {
         return c.text('Expected websocket', 426);
     }
+    
+    // Get the room ID from the URL (e.g., "mooj6" or "550e8400-e29b...")
     let roomId = c.req.param('id');
     let id;
+
+    // FIX: Always use idFromName. 
+    // This ensures that "mooj6" ALWAYS maps to the same Durable Object.
+    // It handles UUIDs and Custom Strings equally well.
     try {
         id = c.env.CHALLENGE.idFromName(roomId); 
     } 
     catch (e) { 
         console.error("ID Generation Error:", e);
+        // Fallback only on catastrophic failure
         id = c.env.CHALLENGE.newUniqueId(); 
     }
     

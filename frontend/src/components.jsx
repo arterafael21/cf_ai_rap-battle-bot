@@ -1,19 +1,137 @@
-import React from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
     Title, Card, Text, Textarea, Button, Group, Badge, Stack, Grid, ActionIcon, 
-    Divider, FileButton, TextInput, Switch, Container, Menu, Avatar, SimpleGrid
+    Divider, FileButton, TextInput, Switch, Container, Menu, Avatar, SimpleGrid,
+    Slider 
 } from '@mantine/core';
 import { 
     IconMicrophone, IconMicrophoneOff, IconSend, IconPlayerPlay, IconBulb, IconRefresh, 
     IconUser, IconCamera, IconCheck, IconEdit, IconTrophy, IconChartBar, IconSwords, 
-    IconId, IconLogout, IconFlame, IconUsers, IconMusic, IconClock, IconAlignLeft, IconKeyboard
+    IconId, IconLogout, IconFlame, IconUsers, IconMusic, IconClock, IconAlignLeft, IconKeyboard, IconPlayerPause
 } from '@tabler/icons-react';
 import { SignedIn, SignedOut, SignInButton } from "@clerk/clerk-react";
 import { OPPONENTS } from '../../src/constants';
 
 // --- SUB-COMPONENTS ---
 
-// components.js
+export const SmartAudioPlayer = ({ src }) => {
+    // 1. Initialize ref as null to prevent "new Audio(null)" errors
+    const audioRef = useRef(null);
+    const [isPlaying, setIsPlaying] = useState(false);
+    const [progress, setProgress] = useState(0);
+    const [duration, setDuration] = useState(0);
+    const [error, setError] = useState(false);
+
+    useEffect(() => {
+        // Stop any previous audio
+        if (audioRef.current) {
+            audioRef.current.pause();
+            audioRef.current = null;
+        }
+
+        if (!src) return;
+
+        // 2. Create new Audio object safely
+        const audio = new Audio(src);
+        audioRef.current = audio;
+        
+        setIsPlaying(false);
+        setProgress(0);
+        setError(false);
+
+        // 3. Attach listeners
+        const updateProgress = () => setProgress(audio.currentTime);
+        const setAudioDuration = () => setDuration(audio.duration);
+        const handleEnd = () => setIsPlaying(false);
+        const handleError = () => setError(true);
+
+        audio.addEventListener('timeupdate', updateProgress);
+        audio.addEventListener('loadedmetadata', setAudioDuration);
+        audio.addEventListener('ended', handleEnd);
+        audio.addEventListener('error', handleError);
+
+        // 4. Safe Auto-play
+        const playPromise = audio.play();
+        if (playPromise !== undefined) {
+            playPromise
+                .then(() => setIsPlaying(true))
+                .catch(e => {
+                    console.log("Auto-play prevented by browser (normal):", e);
+                    setIsPlaying(false);
+                });
+        }
+
+        // Cleanup
+        return () => {
+            audio.pause();
+            audio.removeEventListener('timeupdate', updateProgress);
+            audio.removeEventListener('loadedmetadata', setAudioDuration);
+            audio.removeEventListener('ended', handleEnd);
+            audio.removeEventListener('error', handleError);
+        };
+    }, [src]);
+
+    const togglePlay = async () => {
+        const audio = audioRef.current;
+        if (!audio) return;
+
+        try {
+            if (isPlaying) {
+                audio.pause();
+                setIsPlaying(false);
+            } else {
+                // 5. CRITICAL FIX: Catch play() errors to prevent App Crash
+                await audio.play();
+                setIsPlaying(true);
+            }
+        } catch (e) {
+            console.error("Playback failed:", e);
+            setIsPlaying(false);
+        }
+    };
+
+    const handleSeek = (val) => {
+        const audio = audioRef.current;
+        if (audio) {
+            audio.currentTime = val;
+            setProgress(val);
+        }
+    };
+
+    if (!src) return null;
+    if (error) return <Badge color="red">Audio Error</Badge>;
+
+    return (
+        <Card p={8} radius="xl" bg="gray.1" withBorder style={{ width: '100%', marginTop: 8 }}>
+            <Group gap="xs" wrap="nowrap" align="center">
+                <ActionIcon 
+                    variant="filled" 
+                    color={isPlaying ? "red" : "blue"} 
+                    radius="xl" 
+                    size="lg"
+                    onClick={togglePlay}
+                >
+                    {isPlaying ? <IconPlayerPause size={18} /> : <IconPlayerPlay size={18} />}
+                </ActionIcon>
+                
+                <Slider 
+                    value={progress} 
+                    onChange={handleSeek} 
+                    min={0}
+                    max={duration || 10} 
+                    label={(val) => `${Math.floor(val)}s`}
+                    style={{ flex: 1 }}
+                    size="sm"
+                    thumbSize={14}
+                />
+                
+                <Text size="xs" w={35} ta="right" c="dimmed">
+                    {Math.floor(duration)}s
+                </Text>
+            </Group>
+        </Card>
+    );
+};
 
 // --- 1. UPDATED APP HEADER (Works for Guests) ---
 export const AppHeader = ({ user, isLoaded, identity, stats, avatarTs, onLogout }) => {
@@ -185,15 +303,7 @@ export const BattleInputArea = ({ input, setInput, isRecording, toggleMic, handl
     </>
 );
 
-export const VerseDisplay = ({ 
-    p1Verse, 
-    p2Verse, 
-    p1Title = "YOUR VERSE", 
-    p2Title = "OPPONENT", 
-    onPlayAudio,
-    playDisabled,
-    isReady
-}) => (
+export const VerseDisplay = ({ p1Verse, p2Verse, p1Title, p2Title, p1Audio, p2Audio }) => (
     <Grid>
         <Grid.Col span={{ base: 12, md: 6 }}>
             <Stack gap="xs" h="100%">
@@ -202,6 +312,7 @@ export const VerseDisplay = ({
                     <Text size="sm" style={{ whiteSpace: 'pre-line', fontStyle: 'italic', color: '#333' }}>
                         "{p1Verse}"
                     </Text>
+                    {p1Audio && <SmartAudioPlayer src={p1Audio} />}
                 </Card>
             </Stack>
         </Grid.Col>
@@ -213,24 +324,12 @@ export const VerseDisplay = ({
                     <Text size="sm" style={{ whiteSpace: 'pre-line', fontStyle: 'italic', color: '#333' }}>
                         "{p2Verse}"
                     </Text>
+                    {p2Audio && <SmartAudioPlayer src={p2Audio} />}
                 </Card>
-                {onPlayAudio && isReady && (
-                    <Button 
-                        variant="subtle" 
-                        size="xs" 
-                        leftSection={<IconMusic size={14}/>} 
-                        onClick={onPlayAudio}
-                        loading={playDisabled}
-                        disabled={playDisabled}
-                    >
-                        {playDisabled ? "Speaking..." : "Listen to Bars"}
-                    </Button>
-                )}
             </Stack>
         </Grid.Col>
     </Grid>
 );
-
 export const HistoryItem = ({ item, playAudio, identity }) => {
     // --- 1. DATA SANITIZATION (The Fix) ---
     let opponentName = "Opponent";
