@@ -1,7 +1,7 @@
 import React from 'react';
 import {
     Title, Card, Text, Textarea, Button, Group, Badge, Stack, Grid, ActionIcon, 
-    Divider, FileButton, TextInput, Switch, Container, Menu, Avatar
+    Divider, FileButton, TextInput, Switch, Container, Menu, Avatar, SimpleGrid
 } from '@mantine/core';
 import { 
     IconMicrophone, IconMicrophoneOff, IconSend, IconPlayerPlay, IconBulb, IconRefresh, 
@@ -95,43 +95,57 @@ export const WordDisplay = ({ word, onRefresh }) => (
 );
 
 export const OpponentSelector = ({ current, setOpponent }) => (
-    <Stack gap="sm">
-        <Text ta="center" size="xs" fw={700} c="dimmed" tt="uppercase">Select Your Opponent</Text>
-        <Group justify="center" gap="sm">
+    <Stack gap="xs">
+        <Text ta="center" size="xs" fw={700} c="dimmed" tt="uppercase">
+            Select Opponent
+        </Text>
+        
+        {/* Responsive Grid: 1 column on mobile, 3 on desktop */}
+        <SimpleGrid cols={{ base: 1, sm: 3 }} spacing="sm">
             {Object.keys(OPPONENTS)
                 .filter(key => key !== 'pvp')
                 .map(key => {
                     const bot = OPPONENTS[key];
-                    const isSelected = current === key;  
-                                  
-                return (
-                    <Stack gap={5} align="center" key={key}>
-                        <Button 
-                            key={key} 
-                            radius="md" 
-                            size="lg" // Make button larger to fit 2 lines
-                            variant={isSelected ? 'filled' : 'light'} 
-                            color={isSelected ? bot.color : 'gray'}
-                            onClick={() => setOpponent(key)}
-                            style={{ height: 'auto', padding: '12px 20px' }} // Auto height for stacking
-                        >
-                            <Text fw={900} size="sm" style={{ lineHeight: 1 }}>
-                                {(bot?.name || "Unknown Bot").toUpperCase()}
-                            </Text>
-                        </Button>
-                            <Badge 
-                                size="xs" 
-                                variant='white'
-                                color={isSelected ? bot.color : 'gray'}
-                                style={{ opacity: 0.8 }}
-                            >
-                                {bot.level || 'Unknown'}
-                            </Badge>
-                    </Stack>
+                    const isSelected = current === key;
                     
-                );
+                    return (
+                        <Card 
+                            key={key}
+                            padding="sm" 
+                            radius="md" 
+                            withBorder={!isSelected}
+                            bg={isSelected ? `${bot.color}.1` : 'white'}
+                            style={{ 
+                                cursor: 'pointer', 
+                                borderColor: isSelected ? 'var(--mantine-color-blue-filled)' : undefined,
+                                transition: 'all 0.2s ease'
+                            }}
+                            onClick={() => setOpponent(key)}
+                        >
+                            <Group justify="space-between" wrap="nowrap">
+                                <Group gap="xs" wrap="nowrap">
+                                    {/* Bot Avatar/Icon placeholder */}
+                                    <Avatar size="sm" color={bot.color} radius="xl">
+                                        {bot.name[0]}
+                                    </Avatar>
+                                    <Stack gap={0}>
+                                        <Text size="sm" fw={700} tt="uppercase">
+                                            {bot.name}
+                                        </Text>
+                                        <Text size="xs" c="dimmed" lh={1}>
+                                            {bot.level}
+                                        </Text>
+                                    </Stack>
+                                </Group>
+                                
+                                {isSelected && (
+                                    <IconCheck size={18} color="var(--mantine-color-blue-filled)" />
+                                )}
+                            </Group>
+                        </Card>
+                    );
             })}
-        </Group>
+        </SimpleGrid>
     </Stack>
 );
 
@@ -454,9 +468,10 @@ export const ProfileView = ({ user, stats, identity, onUpdateProfile, uploading,
 };
 
 // --- SPLASH PAGE ---
-export const SplashPage = ({ onGuestLogin }) => ( // <--- FIX: Added { } here
+export const SplashPage = ({ onGuestLogin }) => (
     <Container size="xs" h="100vh" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
         <Card shadow="xl" padding="xl" radius="lg" withBorder style={{ overflow: 'visible' }}>
+            {/* DECORATIVE ICON */}
             <div style={{ 
                 position: 'absolute', top: -40, left: '50%', transform: 'translateX(-50%)',
                 background: 'linear-gradient(45deg, #228be6, #15aabf)', padding: 20, borderRadius: '50%',
@@ -487,7 +502,6 @@ export const SplashPage = ({ onGuestLogin }) => ( // <--- FIX: Added { } here
                         </Button>
                     </SignInButton>
                     
-                    {/* Guest Button */}
                     <Button 
                         size="xl" 
                         radius="xl" 
@@ -501,18 +515,35 @@ export const SplashPage = ({ onGuestLogin }) => ( // <--- FIX: Added { } here
                 
                 <Divider my="sm" label="Features" labelPosition="center" style={{ width: '100%' }} />
                 
-                <Group gap="xl" justify="center" c="dimmed">
-                    <Group gap={5}><IconMicrophone size={16} /><Text size="sm">Voice Input</Text></Group>
-                    <Group gap={5}><IconTrophy size={16} /><Text size="sm">Global Ranks</Text></Group>
-                    <Group gap={5}><IconUsers size={16} /><Text size="sm">Multiplayer</Text></Group>
+                {/* --- FIX IS HERE --- */}
+                {/* gap: xs on mobile, xl on desktop. wrap="nowrap" prevents stacking. */}
+                <Group gap={{ base: 'xs', sm: 'xl' }} justify="center" c="dimmed" wrap="nowrap" style={{ width: '100%' }}>
+                    <Group gap={4} wrap="nowrap">
+                        <IconMicrophone size={16} />
+                        <Text size="sm" visibleFrom="xs">Voice Input</Text>
+                        {/* Short text for very small screens */}
+                        <Text size="sm" hiddenFrom="xs">Voice</Text>
+                    </Group>
+                    
+                    <Group gap={4} wrap="nowrap">
+                        <IconTrophy size={16} />
+                        <Text size="sm" visibleFrom="xs">Global Ranks</Text>
+                        <Text size="sm" hiddenFrom="xs">Ranks</Text>
+                    </Group>
+                    
+                    <Group gap={4} wrap="nowrap">
+                        <IconUsers size={16} />
+                        <Text size="sm" visibleFrom="xs">Multiplayer</Text>
+                        <Text size="sm" hiddenFrom="xs">Multi</Text>
+                    </Group>
                 </Group>
+                
             </Stack>
         </Card>
     </Container>
 );
 
 export const PreBattleCard = ({ user, identity, opponent, config, avatarTs }) => {
-    // 1. Local State for Countdown
     const [count, setCount] = React.useState(5);
 
     React.useEffect(() => {
@@ -524,66 +555,65 @@ export const PreBattleCard = ({ user, identity, opponent, config, avatarTs }) =>
 
     const myAvatar = `/avatar/${user.id}?t=${avatarTs}`;
     const oppAvatar = opponent?.id ? `/avatar/${opponent.id}` : null;
-    
     const myName = identity?.mc_name || user?.firstName || "You";
-
     const oppName = opponent?.name || opponent?.username || "Opponent";
 
     return (
-        <Card shadow="xl" padding="xl" radius="lg" withBorder style={{ minHeight: 400, justifyContent: 'center' }}>
-            <Stack align="center" gap="xl">
+        <Card shadow="xl" padding="lg" radius="lg" withBorder>
+            <Stack align="center" gap="md">
                 
-                <Stack align="center" gap={5}>
-                    <Badge size="xl" variant="filled" color="red" className="pulsing-badge">BATTLE STARTING</Badge>
-                    <Title order={1} style={{ fontSize: 60, lineHeight: 1 }}>{count}</Title>
-                    <Text c="dimmed" size="sm">Entering the Arena...</Text>
+                {/* 1. COMPACT HEADER */}
+                <Stack align="center" gap={0}>
+                    <Badge size="lg" variant="filled" color="red" className="pulsing-badge">STARTING IN</Badge>
+                    <Title order={1} style={{ fontSize: 48, lineHeight: 1 }}>{count}</Title>
                 </Stack>
 
-                <Group gap={40} align="center" justify="center" style={{ width: '100%' }}>
+                {/* 2. PLAYERS SIDE-BY-SIDE (Even on Mobile) */}
+                <Group justify="space-between" align="start" w="100%" wrap="nowrap">
                     
-                    {/* PLAYER 1 (YOU) */}
-                    <Stack align="center">
+                    {/* PLAYER 1 */}
+                    <Stack align="center" gap={5} w="40%">
                         <div style={{ position: 'relative' }}>
-                            <Avatar src={myAvatar} size={120} radius={120} style={{ border: '4px solid #228be6' }} />
-                            <Badge circle size="lg" color="blue" style={{ position: 'absolute', bottom: 10, right: 3 }}>P1</Badge>
+                            {/* Responsive Avatar Size: 80px on mobile, 120px on desktop */}
+                            <Avatar src={myAvatar} size={80} radius={80} style={{ border: '3px solid #228be6' }} />
+                            <Badge circle size="md" color="blue" style={{ position: 'absolute', bottom: 0, right: 0 }}>P1</Badge>
                         </div>
-                        {/* Use Resolved Name */}
-                        <Title order={3}>{myName}</Title>
-                        <Badge variant="light">READY</Badge>
+                        <Text fw={700} size="sm" lineClamp={1} ta="center">{myName}</Text>
+                        <Badge variant="light" size="xs">READY</Badge>
                     </Stack>
 
-                    <Stack align="center" gap="xs">
-                        <Title order={1} style={{ fontSize: 48, fontStyle: 'italic', color: '#fa5252' }}>VS</Title>
+                    {/* VS (Centered & Smaller) */}
+                    <Stack justify="center" h={80}>
+                        <Text fw={900} size="xl" c="dimmed" style={{ fontStyle: 'italic' }}>VS</Text>
                     </Stack>
 
-                    {/* PLAYER 2 (OPPONENT) */}
-                    <Stack align="center">
+                    {/* PLAYER 2 */}
+                    <Stack align="center" gap={5} w="40%">
                         <div style={{ position: 'relative' }}>
-                            <Avatar src={oppAvatar} size={120} radius={120} style={{ border: '4px solid #fa5252' }}>?</Avatar>
-                            <Badge circle size="lg" color="red" style={{ position: 'absolute', bottom: 10, right: 3 }}>P2</Badge>
+                            <Avatar src={oppAvatar} size={80} radius={80} style={{ border: '3px solid #fa5252' }}>?</Avatar>
+                            <Badge circle size="md" color="red" style={{ position: 'absolute', bottom: 0, right: 0 }}>P2</Badge>
                         </div>
-                        {/* Use Resolved Name */}
-                        <Title order={3}>{oppName}</Title>
-                        <Badge variant="light" color="red">READY</Badge>
+                        <Text fw={700} size="sm" lineClamp={1} ta="center">{oppName}</Text>
+                        <Badge variant="light" color="red" size="xs">READY</Badge>
                     </Stack>
 
                 </Group>
 
                 <Divider style={{ width: '100%' }} />
 
-                <Group gap="xl">
-                    <Group gap={5}><IconClock size={18} /><Text fw={700}>{config.turnTime}s Turns</Text></Group>
-                    <Group gap={5}><IconAlignLeft size={18} /><Text fw={700}>{config.rounds} Rounds</Text></Group>
-                    <Group gap={5}>
-                        {config.battleMode === 'audio' ? <IconMicrophone size={18}/> : <IconKeyboard size={18}/>}
-                        <Text fw={700} tt="capitalize">{config.battleMode} Mode</Text>
-                    </Group>
+                {/* 3. COMPACT SETTINGS ROW */}
+                <Group gap="xs" justify="center">
+                    <Badge variant="outline" color="gray" leftSection={<IconClock size={12}/>}>{config.turnTime}s</Badge>
+                    <Badge variant="outline" color="gray" leftSection={<IconAlignLeft size={12}/>}>{config.rounds} Rnds</Badge>
+                    <Badge variant="outline" color="gray" leftSection={config.battleMode === 'audio' ? <IconMicrophone size={12}/> : <IconKeyboard size={12}/>}>
+                        {config.battleMode}
+                    </Badge>
                 </Group>
 
                 {config.mandatoryWord && (
-                    <Card bg="yellow.1" withBorder style={{ borderColor: '#fcc419' }} p="xs" px="xl">
-                         <Text c="orange.9" fw={900}>⚠ MANDATORY WORD: "{config.mandatoryWord}"</Text>
-                    </Card>
+                    <Text size="xs" c="orange.9" fw={700}>
+                        Word: "{config.mandatoryWord}"
+                    </Text>
                 )}
             </Stack>
         </Card>

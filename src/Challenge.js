@@ -8,7 +8,7 @@ export class Challenge {
         this.p1 = null;
         this.p2 = null;
         this.spectators = [];
-
+        
         // Default Config
         this.mandatoryWord = null; 
         this.rounds = 1; 
@@ -24,6 +24,8 @@ export class Challenge {
         // Initialize turn owner
         this.currentTurnOwner = 'p1'; 
         this.status = 'OPEN';
+
+        this.matchStarted = false;
     }
 
     async fetch(request) {

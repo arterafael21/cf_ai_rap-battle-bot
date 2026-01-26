@@ -12,7 +12,7 @@ export const OPPONENTS = {
     'roboflow': { 
         name: 'RoboFlow', 
         voice: 'orion',
-        color: 'blue', 
+        color: 'green', 
         points: 10,
         difficultyModifier: 0,
         level: 'Easy',
@@ -28,7 +28,7 @@ export const OPPONENTS = {
     'bytebeater': { 
         name: 'ByteBeater', 
         voice: 'arcas',
-        color: 'red', 
+        color: 'yellow', 
         difficultyModifier: 5,
         level: 'Medium',
         points: 20,
@@ -42,7 +42,7 @@ export const OPPONENTS = {
     },
     'ai-ce': { 
         name: 'AI-CE', 
-        color: 'purple', 
+        color: 'red', 
         voice: 'luna',
         difficultyModifier: 5,
         level: 'Hard',

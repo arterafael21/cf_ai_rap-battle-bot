@@ -9,6 +9,36 @@ import { Matchmaker } from './Matchmaker'
 
 const app = new Hono();
 
+
+app.get('/ws/queue', async (c) => {
+    const upgrade = c.req.header('Upgrade');
+    if (!upgrade || upgrade.toLowerCase() !== 'websocket') {
+        return c.text('Expected websocket', 426);
+    }
+    const id = c.env.MATCHMAKER.idFromName('GLOBAL_QUEUE');
+    const stub = c.env.MATCHMAKER.get(id);
+    return stub.fetch(c.req.raw);
+});
+
+app.get('/ws/battle/:id', async (c) => {
+    const upgrade = c.req.header('Upgrade');
+    if (!upgrade || upgrade.toLowerCase() !== 'websocket') {
+        return c.text('Expected websocket', 426);
+    }
+    let roomId = c.req.param('id');
+    let id;
+    try {
+        id = c.env.CHALLENGE.idFromName(roomId); 
+    } 
+    catch (e) { 
+        console.error("ID Generation Error:", e);
+        id = c.env.CHALLENGE.newUniqueId(); 
+    }
+    
+    const stub = c.env.CHALLENGE.get(id);
+    return stub.fetch(c.req.raw);
+});
+
 app.use('/*', cors());
 
 // --- HELPER: VERIFY AUTH ---
@@ -351,17 +381,6 @@ app.get('/leaderboard/pvp', async (c) => {
     return c.json(await response.json());
 })
 
-app.get('/ws/battle/:id', async (c) => {
-    const upgrade = c.req.header('Upgrade');
-    if (!upgrade || upgrade.toLowerCase() !== 'websocket') {
-        return c.text('Expected websocket', 426);
-    }
-    let id;
-    try { id = c.env.CHALLENGE.idFromName(c.req.param('id')); } 
-    catch { id = c.env.CHALLENGE.newUniqueId(); }
-    return c.env.CHALLENGE.get(id).fetch(c.req.raw);
-});
-
 
 app.get('/replay/:id', async (c) => {
     if (!c.env.DB) return c.json({ error: 'DB not configured' }, 500);
@@ -475,16 +494,6 @@ app.post('/onboarding/upload', async (c) => {
         console.error("Database Save Failed:", dbError);
         return c.json({ error: "Database error: " + dbError.message }, 500);
     }
-});
-
-app.get('/ws/queue', async (c) => {
-    const upgrade = c.req.header('Upgrade');
-    if (!upgrade || upgrade.toLowerCase() !== 'websocket') {
-        return c.text('Expected websocket', 426);
-    }
-    const id = c.env.MATCHMAKER.idFromName('GLOBAL_QUEUE');
-    const stub = c.env.MATCHMAKER.get(id);
-    return stub.fetch(c.req.raw);
 });
 
 app.get('Id', async (c) => {

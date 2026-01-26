@@ -1,7 +1,7 @@
 import confetti from 'canvas-confetti';
 import React, { useState, useEffect, useRef } from 'react';
 import {
-    MantineProvider, Container, Title, Card, Text, Button, Group, Badge, Stack, Grid, Loader, Tabs, Input, CopyButton, Divider, Center, SegmentedControl, Switch, rem, Modal, FileButton, TextInput, ActionIcon, Table, Avatar, Textarea, Skeleton
+    MantineProvider, Container, Title, Card, Text, Button, Group, Badge, Stack, Grid, Loader, Tabs, Input, CopyButton, Divider, Center, SegmentedControl, Switch, rem, Modal, FileButton, TextInput, ActionIcon, Table, Avatar, Textarea, Skeleton, SimpleGrid
 } from '@mantine/core';
 import { 
     IconMicrophone, IconMicrophoneOff, IconTrophy, IconSwords, IconUsers, IconSearch, IconArrowLeft, IconShare, IconKeyboard, IconMusic, IconUserCircle, IconEdit, IconSend, IconPlayerPlay,
@@ -20,7 +20,8 @@ if (!CLERK_KEY) throw new Error("Missing Publishable Key");
 const getWsUrl = (path) => {
     // 1. Production (Cloudflare)
     if (window.location.hostname.includes('workers.dev')) {
-        return `wss://rap-battle-bot.arterafael21.workers.dev${path}`;
+        // Ensure we use WSS (Secure WebSocket)
+        return `wss://${window.location.hostname}${path}`;
     }
 
     // 2. Local Mobile Testing (LAN)
@@ -215,7 +216,14 @@ function RapBattleApp() {
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
         const replayId = params.get('replay');
-        if (replayId) loadReplay(replayId);
+        const joinCode = params.get('join');
+
+        if (replayId) {
+            loadReplay(replayId);
+        } else if (joinCode) {
+            setBattleCode(joinCode);
+            setMode('join');
+        }
     }, []);
 
     // FIX: Renamed from handleGuestLogIn to handleGuestLogin (lowercase 'i')
@@ -1035,10 +1043,39 @@ function RapBattleApp() {
 
                         <Tabs defaultValue="battle" keepMounted={false}>
                             <Tabs.List grow>
-                                <Tabs.Tab value="battle" leftSection={<IconSwords size={18} />}>Single Player</Tabs.Tab>
-                                <Tabs.Tab value="multiplayer" leftSection={<IconUsers size={18} />}>Multiplayer</Tabs.Tab>
-                                <Tabs.Tab value="leaderboard" leftSection={<IconTrophy size={18} />}>Leaderboard</Tabs.Tab>
-                                <Tabs.Tab value="profile" leftSection={<IconUserCircle size={18} />}>Profile</Tabs.Tab>
+                                
+                                {/* TAB 1: BATTLE */}
+                                <Tabs.Tab value="battle">
+                                    <Group gap={8} justify="center" align="center" wrap="nowrap">
+                                        <IconSwords size={20} />
+                                        <Text span visibleFrom="xs" size="sm">Single</Text>
+                                    </Group>
+                                </Tabs.Tab>
+
+                                {/* TAB 2: MULTIPLAYER */}
+                                <Tabs.Tab value="multiplayer">
+                                    <Group gap={8} justify="center" align="center" wrap="nowrap">
+                                        <IconUsers size={20} />
+                                        <Text span visibleFrom="xs" size="sm">Multi</Text>
+                                    </Group>
+                                </Tabs.Tab>
+
+                                {/* TAB 3: LEADERBOARD */}
+                                <Tabs.Tab value="leaderboard">
+                                    <Group gap={8} justify="center" align="center" wrap="nowrap">
+                                        <IconTrophy size={20} />
+                                        <Text span visibleFrom="xs" size="sm">Ranks</Text>
+                                    </Group>
+                                </Tabs.Tab>
+
+                                {/* TAB 4: PROFILE */}
+                                <Tabs.Tab value="profile">
+                                    <Group gap={8} justify="center" align="center" wrap="nowrap">
+                                        <IconUserCircle size={20} />
+                                        <Text span visibleFrom="xs" size="sm">Profile</Text>
+                                    </Group>
+                                </Tabs.Tab>
+
                             </Tabs.List>
 
                             {/* --- 3. SINGLE PLAYER TAB --- */}
@@ -1278,10 +1315,44 @@ function RapBattleApp() {
                                         <Stack align="center">
                                             <Loader size="lg" variant="dots" />
                                             <Title order={3}>Waiting for Opponent</Title>
+                                            {/* UPDATED CODE SECTION */}
                                             <Group>
                                                 <Text fw={700}>CODE:</Text>
-                                                <Badge size="xl" variant="filled" color="dark">{battleCode}</Badge>
-                                                <CopyButton value={battleCode}>{({ copied, copy }) => (<Button size="xs" onClick={copy}>{copied ? 'Copied' : 'Copy'}</Button>)}</CopyButton>
+                                                <Badge size="xl" variant="filled" color="oklch-blue">{battleCode}</Badge>
+                                                
+                                                {/* 1. Existing Copy Code Button */}
+                                                <CopyButton value={battleCode}>
+                                                    {({ copied, copy }) => (
+                                                        <Button size="xs" onClick={copy} color={copied ? 'teal' : 'blue'}>
+                                                            {copied ? 'Copied' : 'Copy Code'}
+                                                        </Button>
+                                                    )}
+                                                </CopyButton>
+
+                                                {/* 2. NEW Share Link Button */}
+                                                <Button 
+                                                    size="xs" 
+                                                    variant="light" 
+                                                    color="pink"
+                                                    leftSection={<IconShare size={14}/>}
+                                                    onClick={() => {
+                                                        const link = `${window.location.origin}/?join=${battleCode}`;
+                                                        if (navigator.share) {
+                                                            // Use Native Share Sheet (Mobile)
+                                                            navigator.share({
+                                                                title: 'Rap Battle',
+                                                                text: 'Battle me right now!',
+                                                                url: link
+                                                            }).catch(() => {});
+                                                        } else {
+                                                            // Fallback for Desktop
+                                                            navigator.clipboard.writeText(link);
+                                                            alert('Invite Link Copied!');
+                                                        }
+                                                    }}
+                                                >
+                                                    Invite
+                                                </Button>
                                             </Group>
                                             
                                             <Divider style={{ width: '100%' }} label="Settings" labelPosition="center"/>
