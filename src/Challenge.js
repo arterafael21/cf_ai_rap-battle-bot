@@ -26,11 +26,12 @@ export class Challenge {
         this.status = 'OPEN';
     }
 
-    async fetch (request) {
+    async fetch(request) {
         if (this.status === 'FINISHED' || this.status === 'ABANDONED') {
             return new Response('Battle ended.', { status: 403 });
         }
-        if (request.headers.get("Upgrade") === "websocket") {
+        const upgrade = request.headers.get("Upgrade");
+        if (upgrade && upgrade.toLowerCase() === "websocket") {
             const pair = new WebSocketPair();
             const [client, server] = Object.values(pair);
             this.handleSession(server);
@@ -38,6 +39,7 @@ export class Challenge {
         }
         return new Response("Expected WebSocket", { status: 400 });
     }
+
 
     handleSession(webSocket) {
         webSocket.accept();
@@ -62,28 +64,31 @@ export class Challenge {
                     }
 
                     if (event.role === 'CREATE') {
-                        this.resetState();
+                        this.transcript = [];
+                        this.status = 'OPEN';
+                        this.votes = { p1: 0, p2: 0 };
+                        this.votedUsers = new Set();
+                        
                         this.p1 = { ...player, role: 'p1' };
-                        // APPLY SETTINGS IMMEDIATELY
-                        if (event.settings) {
-                            this.applySettings(event.settings);
-                        }
+                        
+                        if (event.settings) this.applySettings(event.settings);
                     } else {
                         // CHECK 2: Does the room exist?
                         if (!this.p1) {
-                            webSocket.send(JSON.stringify({ type: 'ERROR', message: 'Room not found'}));
-                            webSocket.close();
-                            return;
-                        }
-
-                        if (!this.p2) {
                             this.p2 = { ...player, role: 'p2' };
+                            // We do NOT reset the room here. We just sit in the p2 slot.
+                            
+                        } else if (!this.p2) {
+                            // Standard Case: P1 exists, P2 slot empty
+                            this.p2 = { ...player, role: 'p2' };
+                            
+                            // Notify P1 immediately
                             this.p1.socket.send(JSON.stringify({
                                 type: 'OPPONENT_JOINED',
                                 username: this.p2.username,
                                 userId: this.p2.userId
                             }));
-                            this.startMatch();
+
                         } else {
                             // ROOM FULL -> ASSIGN SPECTATOR
                             this.spectators.push(player);
@@ -99,17 +104,12 @@ export class Challenge {
                                 battleMode: this.battleMode,
                                 mandatoryWord: this.mandatoryWord
                             }));
-
-                            this.transcript.forEach(t => {
-                                const verseType = t.username === this.p1.username ? 'p1' : 'p2'; // Simplified check
-                                webSocket.send(JSON.stringify({
-                                    type: 'NEW_VERSE',
-                                    verse: t.text,
-                                    audioData: null // Don't resend heavy audio for history
-                                }));
-                            });
                         }
                     }
+                }
+
+                if (this.p1 && this.p2 && !this.matchStarted) {
+                    this.startMatch();
                 }
 
                 if (event.type === 'VOTE') {
@@ -235,13 +235,15 @@ export class Challenge {
                             pointsEarned = 10 + p1Score; // Draw gets small bonus + score
                         }
 
-                        aiResult.pointsEarned = pointsEarned;
+                        aiResult.pointsEarned = pointsEarned; // (This line exists in your code)
 
                         const savedID = await this.saveBattleToDB(aiResult);
                         aiResult.battle_id = savedID;
 
                         this.broadcast({ type: 'RESULT', result: aiResult });
-                        await this.updateLeaderboard(aiResult.winner);
+
+                        await this.updateLeaderboard(aiResult.winner, aiResult, pointsEarned); 
+
                         this.status = 'FINISHED';
                         
                     } else {
@@ -279,6 +281,7 @@ export class Challenge {
 
     resetState() {
         this.transcript = [];
+        this.matchStarted = false;
         this.p2 = null;
         this.currentTurnOwner = 'p1';
         this.status = 'OPEN';
@@ -294,6 +297,8 @@ export class Challenge {
 
     startMatch() {
         if (!this.p1 || !this.p2) return;
+
+        this.matchStarted = true;
 
         const startMsg = { 
             type: 'MATCH_START', 
@@ -398,48 +403,45 @@ export class Challenge {
     
     // Inside Challenge.js -> updateLeaderboard(winnerUsername, resultData)
 
-async updateLeaderboard(winnerUsername, resultData) {
+async updateLeaderboard(winnerUsername, resultData, finalPoints) {
     if (!winnerUsername || winnerUsername === "Draw") return;
 
     let winnerId = null;
     if (this.p1 && this.p1.username === winnerUsername) winnerId = this.p1.userId;
     else if (this.p2 && this.p2.username === winnerUsername) winnerId = this.p2.userId;
 
+    if (!winnerId) return;
+
     try {
-        // 1. CALCULATE PERFORMANCE POINTS
-        const p1Score = resultData.scores.p1.total || 0;
-        const p2Score = resultData.scores.p2.total || 0;
-        const winBonus = 30; // PvP Win Base
-        const wordBonus = this.mandatoryWord ? 10 : 0;
+        const totalEarned = finalPoints; 
 
-        // Calculate total earned for the winner
-        const totalPvPPoints = winBonus + (winnerId === this.p1.userId ? p1Score : p2Score) + wordBonus;
+        console.log(`[PvP] Updating winner ${winnerUsername} with ${totalEarned} points`);
 
-        // 2. UPDATE PERSONAL PROFILE 
-        const id = this.env.USER_PROFILE.idFromName(winnerId);
-        const userStub = this.env.USER_PROFILE.get(id);
-
+        // 1. Update Personal Profile
+        const userStub = this.env.USER_PROFILE.get(this.env.USER_PROFILE.idFromName(winnerId));
         await userStub.fetch('http://do/update', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 result: 'win',
                 type: 'pvp',
-                pointsValue: totalPvPPoints 
+                pointsValue: totalEarned 
             })
         });
 
-        // 3. UPDATE GLOBAL PVP LEADERBOARD
+        // 2. Update Global PvP Leaderboard
         const lbId = this.env.LEADERBOARD.idFromName('GLOBAL_PVP');
         await this.env.LEADERBOARD.get(lbId).fetch('http://do/submit', {
             method: 'POST',
             body: JSON.stringify({ 
                 username: winnerUsername, 
-                userId: winnerId,
-                score: totalPvPPoints 
+                userId: winnerId, 
+                score: totalEarned 
             })
         });
-    } catch (e) { console.error("PvP Update Failed", e); }
+    } catch (e) {
+        console.error("PvP Leaderboard Update Failed:", e);
+    }
 }
 
     async saveBattleToDB(result) {

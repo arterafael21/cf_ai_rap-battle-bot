@@ -7,9 +7,11 @@ export class Matchmaker {
     }
 
     async fetch(request) {
-        if (request.headers.get("Upgrade") !== "websocket") {
+        const upgrade = request.headers.get("Upgrade");
+        if (!upgrade || upgrade.toLowerCase() !== "websocket") {
             return new Response("Expected WebSocket", { status: 400 });
         }
+
 
         const pair = new WebSocketPair();
         const [client, server] = Object.values(pair);
@@ -67,6 +69,6 @@ export class Matchmaker {
         setTimeout(() => {
             try { p1.close(); } catch (e) {}
             try { p2.close(); } catch (e) {}
-        }, 100);
+        }, 2000);
     }
 }

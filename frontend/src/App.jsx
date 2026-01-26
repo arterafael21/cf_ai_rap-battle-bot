@@ -18,11 +18,19 @@ const CLERK_KEY = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 if (!CLERK_KEY) throw new Error("Missing Publishable Key");
 
 const getWsUrl = (path) => {
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const host = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' 
-        ? '127.0.0.1:8787' 
-        : window.location.host;
-    return `${protocol}//${host}${path}`;
+    // 1. Production (Cloudflare)
+    if (window.location.hostname.includes('workers.dev')) {
+        return `wss://rap-battle-bot.arterafael21.workers.dev${path}`;
+    }
+
+    // 2. Local Mobile Testing (LAN)
+    if (window.location.hostname.startsWith('192.168.') || window.location.hostname.startsWith('10.')) {
+        const ip = window.location.hostname;
+        return `ws://${ip}:8787${path}`;
+    }
+
+    // 3. Local Computer Testing (localhost)
+    return `ws://127.0.0.1:8787${path}`;
 };
 
 // --- MAIN LOGIC ---
@@ -30,6 +38,8 @@ function RapBattleApp() {
    	const { user, isLoaded } = useUser();
 	const { getToken } = useAuth();
     const { signOut } = useClerk();
+    const [guestUser, setGuestUser] = useState(null);
+    const activeUser = clerkUser || guestUser
 
     // STATE
     const [identity, setIdentity] = useState(null);
@@ -464,6 +474,8 @@ function RapBattleApp() {
                 audio.onended = () => { setActiveAudioId(null); currentAudioRef.current = null; };
                 audio.onerror = () => { setActiveAudioId(null); currentAudioRef.current = null; };
                 audio.play().catch(() => setActiveAudioId(null));
+            } else {
+                setActiveAudioId(null);
             }
             return;
         }
@@ -587,11 +599,31 @@ function RapBattleApp() {
     };
 
 	const joinQueue = () => {
+        const audioStarter = new Audio();
+        audioStarter.play().catch(() => {}); 
 		setIsQueuing(true);
 		setStatus("Searching for opponent...");
 
 		// Connect to Matchmaker
-		const queueWs = new WebSocket(getWsUrl('/ws/queue'));
+        const wsUrl = getWsUrl('/ws/queue');
+
+        alert("Phone connecting to:\n" + wsUrl);
+
+        const queueWs = new WebSocket(wsUrl);
+
+        queueWs.onclose = (event) => {
+            console.log("WS Closed:", event.code, event.reason);
+            if (!event.wasClean) {
+                alert(`WS Closed Code: ${event.code}\nReason: ${event.reason || "Unknown Network/Server Error"}`);
+            }
+            setIsQueuing(false);
+        };
+
+        queueWs.onerror = (err) => {
+            console.error("[Queue] Connection Error:", err);
+            alert("Mobile Connection Error. Check if your browser blocks WebSockets.");
+            setIsQueuing(false);
+        };
 
 		queueWs.onmessage = (event) => {
 			const data = JSON.parse(event.data);
@@ -703,10 +735,16 @@ function RapBattleApp() {
 
             // --- RECEIVE TURN ---
             if (msg.type === 'NEW_VERSE') {
-                // Add opponent verse to log
-                setBattleLog(prev => [...prev, { sender: 'opponent', text: msg.verse, audio: msg.audioData }]);
-                
                 const msgId = `msg-${Date.now()}`;
+
+                // Add opponent verse to log
+                setBattleLog(prev => [...prev, { 
+                    id: msgId,
+                    sender: 'opponent', 
+                    text: msg.verse, 
+                    audio: msg.audioData 
+                }]);
+                
                 loadAndPlayAudio(msgId, msg.verse, 'pvp', true);
 
 				const currentVerses = battleLog.length + 1;
@@ -1122,8 +1160,9 @@ function RapBattleApp() {
                                                 p1Title="YOUR VERSE"
                                                 p2Title="AI RESPONSE"
                                                 onPlayAudio={() => loadAndPlayAudio('last-battle', lastBattle.aiVerse, opponent)} 
-                                                playDisabled={activeAudioId === 'last-battle'}
-                                                isReady={readyAudioIds.has('last-battle')} // <--- Check the state here
+                                                loading={activeAudioId === 'last-battle'}
+                                                playDisabled={activeAudioId !== null && activeAudioId !== 'last-battle'}
+                                                isReady={readyAudioIds.has('last-battle')}
                                             />
                                         </Card>
                                     )}

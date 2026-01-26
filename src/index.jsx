@@ -345,12 +345,16 @@ app.get('/leaderboard/pvp', async (c) => {
 })
 
 app.get('/ws/battle/:id', async (c) => {
-    if (c.req.header('Upgrade') !== 'websocket') return c.text('Expected websocket', 426);
+    const upgrade = c.req.header('Upgrade');
+    if (!upgrade || upgrade.toLowerCase() !== 'websocket') {
+        return c.text('Expected websocket', 426);
+    }
     let id;
     try { id = c.env.CHALLENGE.idFromName(c.req.param('id')); } 
     catch { id = c.env.CHALLENGE.newUniqueId(); }
     return c.env.CHALLENGE.get(id).fetch(c.req.raw);
-})
+});
+
 
 app.get('/replay/:id', async (c) => {
     if (!c.env.DB) return c.json({ error: 'DB not configured' }, 500);
@@ -467,9 +471,13 @@ app.post('/onboarding/upload', async (c) => {
 });
 
 app.get('/ws/queue', async (c) => {
-	const id = c.env.MATCHMAKER.idFromName('GLOBAL_QUEUE');
-	const stub = c.env.MATCHMAKER.get(id);
-	return stub.fetch(c.req.raw);
+    const upgrade = c.req.header('Upgrade');
+    if (!upgrade || upgrade.toLowerCase() !== 'websocket') {
+        return c.text('Expected websocket', 426);
+    }
+    const id = c.env.MATCHMAKER.idFromName('GLOBAL_QUEUE');
+    const stub = c.env.MATCHMAKER.get(id);
+    return stub.fetch(c.req.raw);
 });
 
 app.get('Id', async (c) => {
