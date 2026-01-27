@@ -1,7 +1,7 @@
 # Prompt Engineering & Development Strategy
 Below are the key prompts used to architect the system, ordered by the development lifecycle: System Architecture, Frontend Implementation, State Management, Optimization & Debugging.
 
-### 1. vConceptual Mapping & Architecture
+### 1. Conceptual Mapping & Architecture
 
 **Goal:** Translate abstract cloud concepts into domain-specific application logic.
 
