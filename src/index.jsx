@@ -9,40 +9,42 @@ import { Matchmaker } from './Matchmaker'
 
 const app = new Hono();
 
+// --- WEBSOCKET ROUTE: MATCHMAKING QUEUE ---
 app.get('/ws/queue', async (c) => {
-    const upgrade = c.req.header('Upgrade');
-    if (!upgrade || upgrade.toLowerCase() !== 'websocket') {
-        return c.text('Expected websocket', 426);
+    try {
+        const upgrade = c.req.header('Upgrade');
+        if (!upgrade || upgrade.toLowerCase() !== 'websocket') {
+            return c.text('Expected websocket', 426);
+        }
+
+        // 1. CHECK BINDING
+        if (!c.env.MATCHMAKER) {
+            console.error("CRITICAL: c.env.MATCHMAKER is undefined. Check wrangler.toml!");
+            return c.text("Server Misconfiguration: MATCHMAKER binding missing", 500);
+        }
+
+        const id = c.env.MATCHMAKER.idFromName('GLOBAL_QUEUE');
+        const stub = c.env.MATCHMAKER.get(id);
+        return await stub.fetch(c.req.raw);
+
+    } catch (err) {
+        console.error("Queue WS Error:", err.message, err.stack);
+        return c.text(`Queue Handshake Error: ${err.message}`, 500);
     }
-    const id = c.env.MATCHMAKER.idFromName('GLOBAL_QUEUE');
-    const stub = c.env.MATCHMAKER.get(id);
-    return stub.fetch(c.req.raw);
 });
 
+// --- WEBSOCKET ROUTE: BATTLE ROOM ---
 app.get('/ws/battle/:id', async (c) => {
     const upgrade = c.req.header('Upgrade');
     if (!upgrade || upgrade.toLowerCase() !== 'websocket') {
         return c.text('Expected websocket', 426);
     }
-    
-    // Get the room ID from the URL (e.g., "mooj6" or "550e8400-e29b...")
-    let roomId = c.req.param('id');
-    let id;
 
-    // FIX: Always use idFromName. 
-    // This ensures that "mooj6" ALWAYS maps to the same Durable Object.
-    // It handles UUIDs and Custom Strings equally well.
-    try {
-        id = c.env.CHALLENGE.idFromName(roomId); 
-    } 
-    catch (e) { 
-        console.error("ID Generation Error:", e);
-        // Fallback only on catastrophic failure
-        id = c.env.CHALLENGE.newUniqueId(); 
-    }
-    
+    const roomId = c.req.param('id');
+    const id = c.env.CHALLENGE.idFromName(roomId); 
     const stub = c.env.CHALLENGE.get(id);
-    return stub.fetch(c.req.raw);
+
+    return await stub.fetch(c.req.raw);
 });
 
 app.use('/*', cors());
@@ -50,27 +52,22 @@ app.use('/*', cors());
 // --- HELPER: VERIFY AUTH ---
 async function verifyAuth(c) {
     const guestId = c.req.header('x-guest-id');
-    if (guestId && guestId.startsWith('guest_')) {
-        return guestId;
-    }
+    if (guestId && guestId.startsWith('guest_')) return guestId;
 
     const authHeader = c.req.header('Authorization');
     if (!authHeader) throw new Error("Missing Authorization Header");
 
+    // Bypass for local dev if secret is missing (Optional Debugging)
     if (!c.env.CLERK_SECRET_KEY) {
-        console.error("CRITICAL: CLERK_SECRET_KEY is missing in backend env!");
-        throw new Error("Server Configuration Error");
+        console.warn("Missing CLERK_SECRET_KEY. Accepting token blindly for debug.");
+        return "debug_user_" + Date.now();
     }
 
     const token = authHeader.split(' ')[1];
-
     try {
-        const payload = await verifyToken(token, {
-            secretKey: c.env.CLERK_SECRET_KEY
-        });
-        return payload.sub; // The User ID
+        const payload = await verifyToken(token, { secretKey: c.env.CLERK_SECRET_KEY });
+        return payload.sub;
     } catch (e) {
-        console.error("Clerk Verify Failed:", e.message);
         throw new Error("Invalid Token");
     }
 }
@@ -174,7 +171,6 @@ app.post('/battle/judge', async (c) => {
         const cleanedJson = jsonString
             .replace(/,\s*}/g, '}')  // Remove trailing commas
             .replace(/,\s*\]/g, ']') // Remove trailing array commas
-            .replace(/\n/g, ' ');    // Remove newlines
         
         const parsed = JSON.parse(cleanedJson);
 

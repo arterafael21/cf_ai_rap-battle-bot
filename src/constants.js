@@ -1,7 +1,35 @@
 export const WORD_POOL = [
-    "Spatula", "Influenza", "Kryptonite", "Avocado", "Blockchain", 
-    "Tofu", "Spaceship", "Tax Evasion", "Velcro", "Glitter", 
-    "Pineapple", "Algorithm", "Espresso", "Zombie"
+    // --- EASY (Concrete, Everyday) ---
+    "Banana", "Cat", "Dog", "Pizza", "Spatula", "Velcro", "Tofu", "Glitter",
+    "Pencil", "Phone", "Chair", "Shoe", "Water", "Mirror", "Cookie", "Hat",
+    "Bubble", "Clown", "Truck", "Apple", "Bread", "Shirt", "Cloud", "Rain",
+    "Book", "Key", "Door", "Lamp", "Clock", "Spoon", "Fork", "Knife",
+    "Plate", "Bowl", "Cup", "Desk", "Bed", "Rug", "Soap", "Towel",
+    
+    // --- MEDIUM (Pop Culture, Tech, Concepts) ---
+    "Zombie", "Vampire", "Ninja", "Pirate", "Robot", "Alien", "Ghost", "Wizard",
+    "Bitcoin", "Algorithm", "WiFi", "Pixel", "Glitch", "Server", "Hacker", "Drone",
+    "Avocado", "Espresso", "Sushi", "Taco", "Burrito", "Ramen", "Donut", "Bagel",
+    "Galaxy", "Meteor", "Comet", "Planet", "Star", "Moon", "Sun", "Nebula",
+    "Dragon", "Unicorn", "Mermaid", "Phoenix", "Griffin", "Yeti", "Bigfoot", "Hydra",
+    "Influenza", "Virus", "Vaccine", "Bacteria", "Fungus", "Spore", "Pollen", "Allergy",
+    "Kryptonite", "Spaceship", "Laser", "Portal", "Cyborg", "Mutant", "Clone", "Android",
+    
+    // --- HARD (Abstract, Scientific, Weird) ---
+    "Photosynthesis", "Metamorphosis", "Hypothesis", "Analysis", "Diagnosis", "Prognosis", "Synthesis",
+    "Existentialism", "Nihilism", "Solipsism", "Altruism", "Hedonism", "Stoicism", "Optimism",
+    "Blockchain", "Cryptography", "Quantum", "Singularity", "Relativity", "Gravity", "Velocity",
+    "Kaleidoscope", "Labyrinth", "Paradox", "Anomaly", "Enigma", "Mystery", "Puzzle",
+    "Tax Evasion", "Bankruptcy", "Inflation", "Recession", "Monopoly", "Capitalism", "Socialism",
+    "Schadenfreude", "Nostalgia", "Deja Vu", "Euphoria", "Melancholy", "Serendipity", "Epiphany",
+    "Chandelier", "Sarcophagus", "Hieroglyph", "Obelisk", "Pyramid", "Sphinx", "Mummy",
+    "Platypus", "Armadillo", "Chameleon", "Axolotl", "Narwhal", "Octopus", "Squid",
+    
+    // --- INSANE (Tongue Twisters & Rhyme Killers) ---
+    "Discombobulated", "Unprecedented", "Characteristics", "Infrastructure", "Revolutionary",
+    "Entrepreneur", "Miscellaneous", "Onomatopoeia", "Defenestration", "Circumlocution",
+    "Antidisestablishmentarianism", "Flibbertigibbet", "Gobbledygook", "Lollygag", "Malarkey",
+    "Shenanigans", "Skedaddle", "Bamboozle", "Discombobulate", "Kerfuffle"
 ];
 
 export const getRandomWord = () => {
@@ -35,8 +63,8 @@ export const OPPONENTS = {
         system: `You are ByteBeater, a highly technical lyrical miracle AI.
         STYLE:
         - Use complex multi-syllabic rhymes.
-        - Use technical vocabulary (coding, hardware, science) as metaphors for violence.
-        - Act arrogant and superior. Claim you calculate rhymes faster than humans think.
+        - Use rhetorical moves for violence and agression.
+        - Act arrogant and superior.
         - Flow should be dense and fast.
         - EACH LINE / RHYME / BAR SHOULD END IN A COMMA OR PERIOD TO MIMIC FLOW / BREATHS / PAUSES` 
     },

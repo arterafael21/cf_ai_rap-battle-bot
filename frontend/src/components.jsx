@@ -15,7 +15,6 @@ import { OPPONENTS } from '../../src/constants';
 // --- SUB-COMPONENTS ---
 
 export const SmartAudioPlayer = ({ src }) => {
-    // 1. Initialize ref as null to prevent "new Audio(null)" errors
     const audioRef = useRef(null);
     const [isPlaying, setIsPlaying] = useState(false);
     const [progress, setProgress] = useState(0);
@@ -23,7 +22,7 @@ export const SmartAudioPlayer = ({ src }) => {
     const [error, setError] = useState(false);
 
     useEffect(() => {
-        // Stop any previous audio
+        // Stop previous audio
         if (audioRef.current) {
             audioRef.current.pause();
             audioRef.current = null;
@@ -31,37 +30,37 @@ export const SmartAudioPlayer = ({ src }) => {
 
         if (!src) return;
 
-        // 2. Create new Audio object safely
-        const audio = new Audio(src);
+        // --- 1. BASE64 FIX ---
+        let finalSrc = src;
+        if (typeof src === 'string' && !src.startsWith('blob:') && !src.startsWith('http')) {
+            if (!src.startsWith('data:')) {
+                finalSrc = `data:audio/webm;base64,${src}`;
+            }
+        }
+
+        const audio = new Audio(finalSrc);
         audioRef.current = audio;
         
         setIsPlaying(false);
         setProgress(0);
         setError(false);
 
-        // 3. Attach listeners
         const updateProgress = () => setProgress(audio.currentTime);
         const setAudioDuration = () => setDuration(audio.duration);
         const handleEnd = () => setIsPlaying(false);
-        const handleError = () => setError(true);
+        const handleError = (e) => {
+            console.error("Audio Load Error:", e);
+            setError(true);
+        };
 
         audio.addEventListener('timeupdate', updateProgress);
         audio.addEventListener('loadedmetadata', setAudioDuration);
         audio.addEventListener('ended', handleEnd);
         audio.addEventListener('error', handleError);
 
-        // 4. Safe Auto-play
-        const playPromise = audio.play();
-        if (playPromise !== undefined) {
-            playPromise
-                .then(() => setIsPlaying(true))
-                .catch(e => {
-                    console.log("Auto-play prevented by browser (normal):", e);
-                    setIsPlaying(false);
-                });
-        }
+        // --- AUTO-PLAY REMOVED ---
+        // The user must now click the play button manually.
 
-        // Cleanup
         return () => {
             audio.pause();
             audio.removeEventListener('timeupdate', updateProgress);
@@ -80,7 +79,6 @@ export const SmartAudioPlayer = ({ src }) => {
                 audio.pause();
                 setIsPlaying(false);
             } else {
-                // 5. CRITICAL FIX: Catch play() errors to prevent App Crash
                 await audio.play();
                 setIsPlaying(true);
             }
@@ -133,17 +131,16 @@ export const SmartAudioPlayer = ({ src }) => {
     );
 };
 
-// --- 1. UPDATED APP HEADER (Works for Guests) ---
+// --- APP HEADER ---
 export const AppHeader = ({ user, isLoaded, identity, stats, avatarTs, onLogout }) => {
     // Determine Avatar URL
-    const avatarUrl = user?.id?.startsWith('guest_') 
-        ? null // No avatar for guests
+    const isGuest = user?.id?.startsWith('guest_');
+    const avatarUrl = (isGuest || !user?.id) 
+        ? null 
         : `/avatar/${user?.id}?t=${avatarTs}`;
 
-    // Get initials for fallback
     const initials = user?.firstName ? user.firstName[0].toUpperCase() : '?';
 
-    // Show nothing if Clerk isn't loaded yet
     if (!isLoaded) return null;
 
     return (
@@ -303,33 +300,90 @@ export const BattleInputArea = ({ input, setInput, isRecording, toggleMic, handl
     </>
 );
 
-export const VerseDisplay = ({ p1Verse, p2Verse, p1Title, p2Title, p1Audio, p2Audio }) => (
-    <Grid>
-        <Grid.Col span={{ base: 12, md: 6 }}>
+export const VerseDisplay = ({ p1Verse, p2Verse, p1Title, p2Title, p1Audio, p2Audio }) => {
+    
+    // Internal component to handle individual verse audio logic
+    const VerseCard = ({ title, verse, initialAudio, color, borderColor }) => {
+        const [audioSrc, setAudioSrc] = useState(initialAudio);
+        const [loading, setLoading] = useState(false);
+
+        const handleGenerateAudio = async () => {
+            if (!verse) return;
+            setLoading(true);
+            try {
+                const res = await fetch('/speak', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ text: verse, character: 'pvp' }), // Default to pvp voice
+                });
+                if (!res.ok) throw new Error("TTS Failed");
+                const blob = await res.blob();
+                const url = URL.createObjectURL(blob);
+                setAudioSrc(url);
+            } catch (e) {
+                console.error(e);
+                alert("Failed to load audio");
+            } finally {
+                setLoading(false);
+            }
+        };
+
+        return (
             <Stack gap="xs" h="100%">
-                <Text size="xs" fw={700} c="dimmed">{p1Title}</Text>
-                <Card bg="blue.0" radius="md" p="sm" withBorder style={{ borderColor: '#d0ebff', flex: 1 }}>
+                <Text size="xs" fw={700} c="dimmed">{title}</Text>
+                <Card bg={color} radius="md" p="sm" withBorder style={{ borderColor: borderColor, flex: 1 }}>
                     <Text size="sm" style={{ whiteSpace: 'pre-line', fontStyle: 'italic', color: '#333' }}>
-                        "{p1Verse}"
+                        "{verse}"
                     </Text>
-                    {p1Audio && <SmartAudioPlayer src={p1Audio} />}
+                    
+                    {audioSrc ? (
+                        <div style={{ marginTop: 10 }}>
+                            <SmartAudioPlayer src={audioSrc} />
+                        </div>
+                    ) : (
+                        <Button 
+                            variant="white" 
+                            color="dark" 
+                            size="xs" 
+                            mt="sm" 
+                            fullWidth 
+                            onClick={handleGenerateAudio}
+                            loading={loading}
+                            leftSection={<IconPlayerPlay size={14} />}
+                        >
+                            Play Verse
+                        </Button>
+                    )}
                 </Card>
             </Stack>
-        </Grid.Col>
-        
-        <Grid.Col span={{ base: 12, md: 6 }}>
-            <Stack gap="xs" h="100%">
-                <Text size="xs" fw={700} c="dimmed">{p2Title}</Text>
-                <Card bg="red.0" radius="md" p="sm" withBorder style={{ borderColor: '#ffc9c9', flex: 1 }}>
-                    <Text size="sm" style={{ whiteSpace: 'pre-line', fontStyle: 'italic', color: '#333' }}>
-                        "{p2Verse}"
-                    </Text>
-                    {p2Audio && <SmartAudioPlayer src={p2Audio} />}
-                </Card>
-            </Stack>
-        </Grid.Col>
-    </Grid>
-);
+        );
+    };
+
+    return (
+        <Grid>
+            <Grid.Col span={{ base: 12, md: 6 }}>
+                <VerseCard 
+                    title={p1Title} 
+                    verse={p1Verse} 
+                    initialAudio={p1Audio} 
+                    color="blue.0" 
+                    borderColor="#d0ebff" 
+                />
+            </Grid.Col>
+            
+            <Grid.Col span={{ base: 12, md: 6 }}>
+                <VerseCard 
+                    title={p2Title} 
+                    verse={p2Verse} 
+                    initialAudio={p2Audio} 
+                    color="red.0" 
+                    borderColor="#ffc9c9" 
+                />
+            </Grid.Col>
+        </Grid>
+    );
+};
+
 export const HistoryItem = ({ item, playAudio, identity }) => {
     // --- 1. DATA SANITIZATION (The Fix) ---
     let opponentName = "Opponent";
