@@ -516,7 +516,7 @@ export class Challenge extends DurableObject {
                     "comment": "A 1-sentence summary of why." 
                 }`;
 
-            const res = await this.env.AI.run('@cf/meta/llama-3-8b-instruct', { messages: [{ role: 'user', content: prompt }] });
+            const res = await this.env.AI.run('@cf/meta/llama-3.1-8b-instruct-fp8', { messages: [{ role: 'user', content: prompt }] });
             
             // 5. PARSE AI RESPONSE
             const match = res.response.match(/\{[\s\S]*\}/);
